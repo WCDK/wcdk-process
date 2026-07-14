@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.wcdk.proces.mapper.ProcessRequestMapper">
+
+    <resultMap id="ProcessRequestResultMap" type="com.wcdk.proces.entity.ProcessRequest">
+        <id property="id" column="ID"/>
+        <result property="processNo" column="PROCESS_NO"/>
+        <result property="starter" column="STARTER"/>
+        <result property="taskName" column="TASK_NAME"/>
+        <result property="businessTitle" column="BUSINESS_TITLE"/>
+        <result property="formDataJson" column="FORM_DATA_JSON"/>
+        <result property="status" column="STATUS"/>
+        <result property="processInstanceId" column="PROCESS_INSTANCE_ID"/>
+        <result property="currentTaskId" column="CURRENT_TASK_ID"/>
+        <result property="currentTaskName" column="CURRENT_TASK_NAME"/>
+        <result property="processDefinitionKey" column="PROCESS_DEFINITION_KEY"/>
+        <result property="createTime" column="CREATE_TIME"/>
+        <result property="updateTime" column="UPDATE_TIME"/>
+    </resultMap>
+
+    <sql id="BaseColumnList">
+        ID,
+        PROCESS_NO,
+        STARTER,
+        TASK_NAME,
+        BUSINESS_TITLE,
+        FORM_DATA_JSON,
+        STATUS,
+        PROCESS_INSTANCE_ID,
+        CURRENT_TASK_ID,
+        CURRENT_TASK_NAME,
+        PROCESS_DEFINITION_KEY,
+        CREATE_TIME,
+        UPDATE_TIME
+    </sql>
+
+    <select id="selectByProcessInstanceId" resultMap="ProcessRequestResultMap">
+        SELECT
+        <include refid="BaseColumnList"/>
+        FROM WCDK_PROCESS_REQUEST
+        WHERE PROCESS_INSTANCE_ID = #{processInstanceId}
+    </select>
+
+    <select id="selectOrderByCreateTimeDesc" resultMap="ProcessRequestResultMap">
+        SELECT
+        <include refid="BaseColumnList"/>
+        FROM WCDK_PROCESS_REQUEST
+        ORDER BY CREATE_TIME DESC
+    </select>
+</mapper>
