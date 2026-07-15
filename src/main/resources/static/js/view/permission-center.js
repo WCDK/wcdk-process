@@ -49,12 +49,16 @@ window.PermissionCenter = {
                         <el-button @click="resetQuery">重置</el-button>
                     </el-form-item>
                 </el-form>
-                <el-table :data="records" stripe>
+                <el-table
+                    :data="treeRecords"
+                    stripe
+                    row-key="id"
+                    :tree-props="{ children: 'children' }">
                     <el-table-column prop="permissionCode" label="权限编码" min-width="180"></el-table-column>
-                    <el-table-column prop="permissionName" label="权限名称" min-width="160"></el-table-column>
+                    <el-table-column prop="permissionName" label="权限名称" min-width="180"></el-table-column>
                     <el-table-column prop="permissionType" label="类型" width="100"></el-table-column>
                     <el-table-column prop="sortNo" label="排序号" width="100"></el-table-column>
-                    <el-table-column prop="routePath" label="路由地址" min-width="160"></el-table-column>
+                    <el-table-column prop="routePath" label="路由地址" min-width="180"></el-table-column>
                     <el-table-column prop="parentPermissionName" label="父级权限" min-width="160"></el-table-column>
                     <el-table-column prop="status" label="状态" width="100">
                         <template slot-scope="scope">
@@ -152,6 +156,26 @@ window.PermissionCenter = {
                 remark: ""
             }
         };
+    },
+    computed: {
+        treeRecords: function () {
+            var nodeMap = {};
+            var roots = [];
+            (this.records || []).forEach(function (item) {
+                nodeMap[item.id] = Object.assign({}, item, {
+                    children: []
+                });
+            });
+            Object.keys(nodeMap).forEach(function (key) {
+                var node = nodeMap[key];
+                if (node.parentId && nodeMap[node.parentId]) {
+                    nodeMap[node.parentId].children.push(node);
+                } else {
+                    roots.push(node);
+                }
+            });
+            return roots;
+        }
     },
     mounted: function () {
         this.queryList();
