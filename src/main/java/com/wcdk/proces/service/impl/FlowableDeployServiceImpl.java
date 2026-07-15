@@ -8,13 +8,17 @@ import com.wcdk.proces.dto.ProcessActionButtonResponse;
 import com.wcdk.proces.dto.ProcessDefinitionDetailResponse;
 import com.wcdk.proces.dto.ProcessDiagramEdgeResponse;
 import com.wcdk.proces.dto.ProcessDiagramNodeResponse;
+import com.wcdk.proces.dto.ProcessDiagramWaypointResponse;
 import com.wcdk.proces.dto.ProcessFormFieldResponse;
 import com.wcdk.proces.dto.ProcessFormOptionResponse;
 import com.wcdk.proces.dto.ProcessDefinitionResponse;
 import com.wcdk.proces.service.FlowableDeployService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.flowable.bpmn.converter.BpmnXMLConverter;
 import org.flowable.bpmn.model.BpmnModel;
+import org.flowable.bpmn.model.FlowElement;
+import org.flowable.bpmn.model.FlowElementsContainer;
 import org.flowable.bpmn.model.FlowNode;
 import org.flowable.bpmn.model.GraphicInfo;
 import org.flowable.bpmn.model.Process;
@@ -34,6 +38,10 @@ import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 
 import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamReader;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -82,17 +90,25 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
         }
         String validDeploymentName = validateDeploymentName(deploymentName);
         log.info("开始部署流程文件，流程名称：{}，文件名：{}", validDeploymentName, file.getOriginalFilename());
-        try (InputStream inputStream = file.getInputStream()) {
+        try {
+            byte[] fileBytes = file.getBytes();
+            BpmnModel bpmnModel = parseBpmnModel(fileBytes);
+            validateBpmnModel(bpmnModel);
+            String resourceName = resolveDeploymentResourceName(file.getOriginalFilename());
+            byte[] deployBytes = new BpmnXMLConverter().convertToXML(bpmnModel, StandardCharsets.UTF_8.name());
             Deployment deployment = repositoryService.createDeployment()
                     .name(validDeploymentName)
                     .category(category)
-                    .addInputStream(file.getOriginalFilename(), inputStream)
+                    .addBytes(resourceName, deployBytes)
                     .deploy();
             log.info("流程部署成功，部署ID：{}", deployment.getId());
             return buildDeploymentResponse(deployment);
         } catch (IOException ex) {
             log.error("读取流程部署文件失败", ex);
             throw new IllegalArgumentException("读取流程部署文件失败");
+        } catch (XMLStreamException ex) {
+            log.error("解析 BPMN 文件失败", ex);
+            throw new IllegalArgumentException("解析 BPMN 文件失败");
         }
     }
 
@@ -142,18 +158,16 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
                 .singleResult();
         BpmnModel bpmnModel = repositoryService.getBpmnModel(processDefinitionId);
         Process process = bpmnModel == null ? null : bpmnModel.getMainProcess();
-        List<ProcessDiagramNodeResponse> nodes = process == null ? List.of() : process.getFlowElements()
+        List<ProcessDiagramNodeResponse> nodes = process == null ? List.of() : collectFlowNodes(process)
                 .stream()
-                .filter(FlowNode.class::isInstance)
-                .map(FlowNode.class::cast)
                 .sorted(Comparator
                         .comparing((FlowNode node) -> resolveNodeX(bpmnModel, node.getId()))
                         .thenComparing(node -> resolveNodeY(bpmnModel, node.getId())))
                 .map(node -> buildNodeResponse(bpmnModel, node))
                 .toList();
-        List<ProcessDiagramEdgeResponse> sequenceFlows = process == null ? List.of() : process.findFlowElementsOfType(SequenceFlow.class)
+        List<ProcessDiagramEdgeResponse> sequenceFlows = process == null ? List.of() : collectSequenceFlows(process)
                 .stream()
-                .map(this::buildEdgeResponse)
+                .map(sequenceFlow -> buildEdgeResponse(bpmnModel, sequenceFlow))
                 .toList();
         String bpmnXml = readBpmnXml(processDefinition);
         DynamicPageSchema dynamicPageSchema = buildDynamicPageSchema(bpmnXml, nodes, processDefinition.getKey());
@@ -211,6 +225,53 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
         return trimmedDeploymentName;
     }
 
+    private BpmnModel parseBpmnModel(byte[] fileBytes) throws XMLStreamException {
+        if (fileBytes == null || fileBytes.length == 0) {
+            throw new IllegalArgumentException("流程文件内容不能为空");
+        }
+        XMLInputFactory inputFactory = XMLInputFactory.newFactory();
+        try (ByteArrayInputStream inputStream = new ByteArrayInputStream(fileBytes)) {
+            XMLStreamReader streamReader = inputFactory.createXMLStreamReader(inputStream, StandardCharsets.UTF_8.name());
+            return new BpmnXMLConverter().convertToBpmnModel(streamReader);
+        } catch (IOException ex) {
+            throw new IllegalArgumentException("读取 BPMN 文件失败", ex);
+        }
+    }
+
+    private void validateBpmnModel(BpmnModel bpmnModel) {
+        if (bpmnModel == null) {
+            throw new IllegalArgumentException("流程文件解析后为空");
+        }
+        Process mainProcess = bpmnModel.getMainProcess();
+        if (mainProcess == null || !StringUtils.hasText(mainProcess.getId())) {
+            throw new IllegalArgumentException("流程文件缺少主流程定义");
+        }
+        boolean hasFlowNode = mainProcess.getFlowElements()
+                .stream()
+                .anyMatch(FlowNode.class::isInstance);
+        if (!hasFlowNode) {
+            throw new IllegalArgumentException("流程文件中未找到可绘制到画布的节点");
+        }
+    }
+
+    private String resolveDeploymentResourceName(String originalFilename) {
+        if (!StringUtils.hasText(originalFilename)) {
+            return "process-upload.bpmn20.xml";
+        }
+        String trimmedName = originalFilename.trim();
+        String lowerCaseName = trimmedName.toLowerCase(Locale.ROOT);
+        if (lowerCaseName.endsWith(".bpmn20.xml")) {
+            return trimmedName;
+        }
+        if (lowerCaseName.endsWith(".bpmn")) {
+            return trimmedName.substring(0, trimmedName.length() - 5) + ".bpmn20.xml";
+        }
+        if (lowerCaseName.endsWith(".xml")) {
+            return trimmedName.substring(0, trimmedName.length() - 4) + ".bpmn20.xml";
+        }
+        return trimmedName + ".bpmn20.xml";
+    }
+
     private DeploymentResponse buildDeploymentResponse(Deployment deployment) {
         return DeploymentResponse.builder()
                 .deploymentId(deployment.getId())
@@ -249,13 +310,21 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
                 .build();
     }
 
-    private ProcessDiagramEdgeResponse buildEdgeResponse(SequenceFlow sequenceFlow) {
+    private ProcessDiagramEdgeResponse buildEdgeResponse(BpmnModel bpmnModel, SequenceFlow sequenceFlow) {
+        List<ProcessDiagramWaypointResponse> waypoints = bpmnModel == null ? List.of() : bpmnModel.getFlowLocationGraphicInfo(sequenceFlow.getId())
+                .stream()
+                .map(graphicInfo -> ProcessDiagramWaypointResponse.builder()
+                        .x(graphicInfo.getX())
+                        .y(graphicInfo.getY())
+                        .build())
+                .toList();
         return ProcessDiagramEdgeResponse.builder()
                 .elementId(sequenceFlow.getId())
                 .elementName(sequenceFlow.getName())
                 .sourceRef(sequenceFlow.getSourceRef())
                 .targetRef(sequenceFlow.getTargetRef())
                 .conditionExpression(sequenceFlow.getConditionExpression())
+                .waypoints(waypoints)
                 .build();
     }
 
@@ -277,6 +346,38 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
     private Double resolveNodeY(BpmnModel bpmnModel, String nodeId) {
         GraphicInfo graphicInfo = bpmnModel == null ? null : bpmnModel.getGraphicInfo(nodeId);
         return graphicInfo == null ? Double.MAX_VALUE : graphicInfo.getY();
+    }
+
+    private List<FlowNode> collectFlowNodes(FlowElementsContainer container) {
+        List<FlowNode> nodes = new ArrayList<>();
+        if (container == null || container.getFlowElements() == null) {
+            return nodes;
+        }
+        for (FlowElement flowElement : container.getFlowElements()) {
+            if (flowElement instanceof FlowNode flowNode) {
+                nodes.add(flowNode);
+            }
+            if (flowElement instanceof FlowElementsContainer childContainer) {
+                nodes.addAll(collectFlowNodes(childContainer));
+            }
+        }
+        return nodes;
+    }
+
+    private List<SequenceFlow> collectSequenceFlows(FlowElementsContainer container) {
+        List<SequenceFlow> sequenceFlows = new ArrayList<>();
+        if (container == null || container.getFlowElements() == null) {
+            return sequenceFlows;
+        }
+        for (FlowElement flowElement : container.getFlowElements()) {
+            if (flowElement instanceof SequenceFlow sequenceFlow) {
+                sequenceFlows.add(sequenceFlow);
+            }
+            if (flowElement instanceof FlowElementsContainer childContainer) {
+                sequenceFlows.addAll(collectSequenceFlows(childContainer));
+            }
+        }
+        return sequenceFlows;
     }
 
     private DynamicPageSchema buildDynamicPageSchema(String bpmnXml,

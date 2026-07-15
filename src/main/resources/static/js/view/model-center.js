@@ -453,6 +453,7 @@ window.ModelCenter = {
                 throw new Error("模型源码中未找到流程定义");
             }
             var shapeMap = this.buildShapeMap(documentNode);
+            var edgeWaypointMap = this.buildEdgeWaypointMap(documentNode);
             var nodes = [];
             var sequenceFlows = [];
             var supportedNodeTypes = {
@@ -461,40 +462,12 @@ window.ModelCenter = {
                 userTask: "UserTask",
                 manualTask: "ManualTask",
                 serviceTask: "ServiceTask",
+                subProcess: "SubProcess",
                 exclusiveGateway: "ExclusiveGateway",
                 parallelGateway: "ParallelGateway",
                 inclusiveGateway: "InclusiveGateway"
             };
-            var children = processElement.children || [];
-            for (var index = 0; index < children.length; index += 1) {
-                var child = children[index];
-                var localName = child.localName || child.nodeName;
-                if (supportedNodeTypes[localName]) {
-                    var elementId = child.getAttribute("id") || "";
-                    var bounds = shapeMap[elementId] || {};
-                    nodes.push({
-                        elementId: elementId,
-                        elementName: child.getAttribute("name") || "",
-                        elementType: supportedNodeTypes[localName],
-                        documentation: this.extractDocumentation(child),
-                        x: this.toNumber(bounds.x, nodes.length * 180),
-                        y: this.toNumber(bounds.y, 0),
-                        width: this.toNumber(bounds.width, localName === "startEvent" || localName === "endEvent" ? 56 : 120),
-                        height: this.toNumber(bounds.height, localName === "startEvent" || localName === "endEvent" ? 56 : 60),
-                        incomingCount: 0,
-                        outgoingCount: 0
-                    });
-                    continue;
-                }
-                if (localName === "sequenceFlow") {
-                    sequenceFlows.push({
-                        elementId: child.getAttribute("id") || "",
-                        elementName: child.getAttribute("name") || "",
-                        sourceRef: child.getAttribute("sourceRef") || "",
-                        targetRef: child.getAttribute("targetRef") || ""
-                    });
-                }
-            }
+            this.collectPreviewFlowElements(processElement, shapeMap, edgeWaypointMap, supportedNodeTypes, nodes, sequenceFlows);
             var nodeMap = {};
             for (var nodeIndex = 0; nodeIndex < nodes.length; nodeIndex += 1) {
                 nodeMap[nodes[nodeIndex].elementId] = nodes[nodeIndex];
@@ -539,6 +512,69 @@ window.ModelCenter = {
                     width: bounds ? bounds.getAttribute("width") : "",
                     height: bounds ? bounds.getAttribute("height") : ""
                 };
+            }
+            return result;
+        },
+        buildEdgeWaypointMap: function (documentNode) {
+            var result = {};
+            var edges = documentNode.getElementsByTagNameNS("*", "BPMNEdge");
+            for (var index = 0; index < edges.length; index += 1) {
+                var edge = edges[index];
+                var elementId = edge.getAttribute("bpmnElement") || "";
+                if (!elementId) {
+                    continue;
+                }
+                var waypoints = edge.getElementsByTagNameNS("*", "waypoint");
+                result[elementId] = this.buildPreviewWaypoints(waypoints);
+            }
+            return result;
+        },
+        collectPreviewFlowElements: function (containerElement, shapeMap, edgeWaypointMap, supportedNodeTypes, nodes, sequenceFlows) {
+            var children = containerElement && containerElement.children ? containerElement.children : [];
+            for (var index = 0; index < children.length; index += 1) {
+                var child = children[index];
+                var localName = child.localName || child.nodeName;
+                if (supportedNodeTypes[localName]) {
+                    var elementId = child.getAttribute("id") || "";
+                    var bounds = shapeMap[elementId] || {};
+                    var isEventNode = localName === "startEvent" || localName === "endEvent";
+                    nodes.push({
+                        elementId: elementId,
+                        elementName: child.getAttribute("name") || "",
+                        elementType: supportedNodeTypes[localName],
+                        documentation: this.extractDocumentation(child),
+                        x: this.toNumber(bounds.x, nodes.length * 180),
+                        y: this.toNumber(bounds.y, 0),
+                        width: this.toNumber(bounds.width, isEventNode ? 56 : 120),
+                        height: this.toNumber(bounds.height, isEventNode ? 56 : 60),
+                        incomingCount: 0,
+                        outgoingCount: 0
+                    });
+                    if (localName === "subProcess") {
+                        this.collectPreviewFlowElements(child, shapeMap, edgeWaypointMap, supportedNodeTypes, nodes, sequenceFlows);
+                    }
+                    continue;
+                }
+                if (localName === "sequenceFlow") {
+                    var flowId = child.getAttribute("id") || "";
+                    sequenceFlows.push({
+                        elementId: flowId,
+                        elementName: child.getAttribute("name") || "",
+                        sourceRef: child.getAttribute("sourceRef") || "",
+                        targetRef: child.getAttribute("targetRef") || "",
+                        waypoints: edgeWaypointMap[flowId] || []
+                    });
+                }
+            }
+        },
+        buildPreviewWaypoints: function (waypointElements) {
+            var result = [];
+            var waypoints = waypointElements || [];
+            for (var index = 0; index < waypoints.length; index += 1) {
+                result.push({
+                    x: this.toNumber(waypoints[index].getAttribute("x"), 0),
+                    y: this.toNumber(waypoints[index].getAttribute("y"), 0)
+                });
             }
             return result;
         },

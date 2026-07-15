@@ -181,6 +181,7 @@ window.ProcessDiagram = {
             };
             this.hideTooltip();
             this.drawCanvasBackground(context, logicalWidth, logicalHeight);
+            this.drawSubProcessContainers(context, nodes, minX, minY, padding, activeNodeIds || []);
             this.drawProcessEdges(context, detail.sequenceFlows || [], nodes, minX, minY, padding, activeNodeIds || []);
             this.drawProcessNodes(context, nodes, minX, minY, padding, activeNodeIds || []);
         },
@@ -344,36 +345,98 @@ window.ProcessDiagram = {
                     continue;
                 }
                 var isActiveEdge = !!(activeNodeMap[edge.sourceRef] || activeNodeMap[edge.targetRef]);
-                var startPoint = this.resolveExitPoint(sourceNode, minX, minY, padding);
-                var endPoint = this.resolveEntryPoint(targetNode, minX, minY, padding);
-                var turnOffset = Math.max(28, Math.min(54, Math.abs(endPoint.x - startPoint.x) / 2));
-                var midX = startPoint.x + turnOffset;
-                var endTurnX = endPoint.x - turnOffset;
                 context.save();
                 context.lineWidth = isActiveEdge ? 3 : 2;
                 context.strokeStyle = isActiveEdge ? "#22c55e" : "#8fa3bf";
                 context.shadowColor = isActiveEdge ? "rgba(34,197,94,0.24)" : "rgba(15,23,42,0.08)";
                 context.shadowBlur = isActiveEdge ? 12 : 4;
-                context.beginPath();
-                context.moveTo(startPoint.x, startPoint.y);
-                if (endPoint.x <= startPoint.x + 24) {
-                    var detourX = startPoint.x + 28;
-                    context.lineTo(detourX, startPoint.y);
-                    context.quadraticCurveTo(detourX + 10, startPoint.y, detourX + 10, startPoint.y + (endPoint.y > startPoint.y ? 10 : -10));
-                    context.lineTo(detourX + 10, endPoint.y - (endPoint.y > startPoint.y ? 10 : -10));
-                    context.quadraticCurveTo(detourX + 10, endPoint.y, detourX + 20, endPoint.y);
-                    context.lineTo(endPoint.x, endPoint.y);
+                if (Array.isArray(edge.waypoints) && edge.waypoints.length >= 2) {
+                    var normalizedWaypoints = this.normalizeEdgeWaypoints(edge.waypoints, minX, minY, padding);
+                    this.drawEdgePathByWaypoints(context, normalizedWaypoints);
+                    var lastPoint = normalizedWaypoints[normalizedWaypoints.length - 1];
+                    this.drawArrowHead(context, lastPoint.x, lastPoint.y, isActiveEdge ? "#22c55e" : "#8fa3bf");
                 } else {
-                    context.lineTo(midX - 10, startPoint.y);
-                    context.quadraticCurveTo(midX, startPoint.y, midX, startPoint.y + (endPoint.y > startPoint.y ? 10 : -10));
-                    context.lineTo(endTurnX, endPoint.y - (endPoint.y > startPoint.y ? 10 : -10));
-                    context.quadraticCurveTo(endTurnX, endPoint.y, endTurnX + 10, endPoint.y);
-                    context.lineTo(endPoint.x, endPoint.y);
+                    var startPoint = this.resolveExitPoint(sourceNode, minX, minY, padding);
+                    var endPoint = this.resolveEntryPoint(targetNode, minX, minY, padding);
+                    var turnOffset = Math.max(28, Math.min(54, Math.abs(endPoint.x - startPoint.x) / 2));
+                    var midX = startPoint.x + turnOffset;
+                    var endTurnX = endPoint.x - turnOffset;
+                    context.beginPath();
+                    context.moveTo(startPoint.x, startPoint.y);
+                    if (endPoint.x <= startPoint.x + 24) {
+                        var detourX = startPoint.x + 28;
+                        context.lineTo(detourX, startPoint.y);
+                        context.quadraticCurveTo(detourX + 10, startPoint.y, detourX + 10, startPoint.y + (endPoint.y > startPoint.y ? 10 : -10));
+                        context.lineTo(detourX + 10, endPoint.y - (endPoint.y > startPoint.y ? 10 : -10));
+                        context.quadraticCurveTo(detourX + 10, endPoint.y, detourX + 20, endPoint.y);
+                        context.lineTo(endPoint.x, endPoint.y);
+                    } else {
+                        context.lineTo(midX - 10, startPoint.y);
+                        context.quadraticCurveTo(midX, startPoint.y, midX, startPoint.y + (endPoint.y > startPoint.y ? 10 : -10));
+                        context.lineTo(endTurnX, endPoint.y - (endPoint.y > startPoint.y ? 10 : -10));
+                        context.quadraticCurveTo(endTurnX, endPoint.y, endTurnX + 10, endPoint.y);
+                        context.lineTo(endPoint.x, endPoint.y);
+                    }
+                    context.stroke();
+                    this.drawArrowHead(context, endPoint.x, endPoint.y, isActiveEdge ? "#22c55e" : "#8fa3bf");
                 }
-                context.stroke();
-                this.drawArrowHead(context, endPoint.x, endPoint.y, isActiveEdge ? "#22c55e" : "#8fa3bf");
                 context.restore();
             }
+        },
+        drawSubProcessContainers: function (context, nodes, minX, minY, padding, activeNodeIds) {
+            if (!nodes || !nodes.length) {
+                return;
+            }
+            var activeNodeMap = {};
+            for (var i = 0; i < activeNodeIds.length; i += 1) {
+                activeNodeMap[activeNodeIds[i]] = true;
+            }
+            for (var j = 0; j < nodes.length; j += 1) {
+                var node = nodes[j];
+                if (node.elementType !== "SubProcess") {
+                    continue;
+                }
+                var x = (node.x || 0) - minX + padding;
+                var y = (node.y || 0) - minY + padding;
+                var width = node.width || 132;
+                var height = node.height || 64;
+                var isActive = !!activeNodeMap[node.elementId];
+                var theme = this.resolveNodeTheme(node, isActive);
+                context.save();
+                context.shadowColor = isActive ? "rgba(34,197,94,0.16)" : "rgba(15,23,42,0.06)";
+                context.shadowBlur = isActive ? 14 : 8;
+                context.shadowOffsetY = isActive ? 8 : 4;
+                context.fillStyle = this.createNodeGradient(context, x, y, width, height, theme.fillStart, theme.fillEnd);
+                context.strokeStyle = theme.stroke;
+                context.lineWidth = isActive ? 3 : 2;
+                this.drawRoundedRect(context, x, y, width, height, 18);
+                context.fill();
+                context.stroke();
+                context.restore();
+                this.drawNodeText(context, node, x, y, width, height, theme, isActive);
+            }
+        },
+        normalizeEdgeWaypoints: function (waypoints, minX, minY, padding) {
+            var result = [];
+            for (var i = 0; i < waypoints.length; i += 1) {
+                var point = waypoints[i] || {};
+                result.push({
+                    x: (Number(point.x) || 0) - minX + padding,
+                    y: (Number(point.y) || 0) - minY + padding
+                });
+            }
+            return result;
+        },
+        drawEdgePathByWaypoints: function (context, waypoints) {
+            if (!Array.isArray(waypoints) || waypoints.length < 2) {
+                return;
+            }
+            context.beginPath();
+            context.moveTo(waypoints[0].x, waypoints[0].y);
+            for (var i = 1; i < waypoints.length; i += 1) {
+                context.lineTo(waypoints[i].x, waypoints[i].y);
+            }
+            context.stroke();
         },
         resolveExitPoint: function (node, minX, minY, padding) {
             var x = (node.x || 0) - minX + padding;
@@ -413,6 +476,9 @@ window.ProcessDiagram = {
             }
             for (var j = 0; j < nodes.length; j += 1) {
                 var node = nodes[j];
+                if (node.elementType === "SubProcess") {
+                    continue;
+                }
                 var x = (node.x || 0) - minX + padding;
                 var y = (node.y || 0) - minY + padding;
                 var width = node.width || 132;
@@ -480,6 +546,15 @@ window.ProcessDiagram = {
                     stroke: "#f59e0b",
                     title: "#9a3412",
                     subTitle: "#ea580c"
+                };
+            }
+            if (node.elementType === "SubProcess") {
+                return {
+                    fillStart: "#f8fafc",
+                    fillEnd: "#edf4ff",
+                    stroke: "#7c93b6",
+                    title: "#334155",
+                    subTitle: "#64748b"
                 };
             }
             return {
@@ -620,6 +695,7 @@ window.ProcessDiagramUtils = {
             throw new Error("流程源码中未找到流程定义");
         }
         var shapeMap = this.buildShapeMap(documentNode);
+        var edgeWaypointMap = this.buildEdgeWaypointMap(documentNode);
         var nodes = [];
         var sequenceFlows = [];
         var supportedNodeTypes = {
@@ -628,40 +704,12 @@ window.ProcessDiagramUtils = {
             userTask: "UserTask",
             manualTask: "ManualTask",
             serviceTask: "ServiceTask",
+            subProcess: "SubProcess",
             exclusiveGateway: "ExclusiveGateway",
             parallelGateway: "ParallelGateway",
             inclusiveGateway: "InclusiveGateway"
         };
-        var children = processElement.children || [];
-        for (var index = 0; index < children.length; index += 1) {
-            var child = children[index];
-            var localName = child.localName || child.nodeName;
-            if (supportedNodeTypes[localName]) {
-                var elementId = child.getAttribute("id") || "";
-                var bounds = shapeMap[elementId] || {};
-                nodes.push({
-                    elementId: elementId,
-                    elementName: child.getAttribute("name") || "",
-                    elementType: supportedNodeTypes[localName],
-                    documentation: this.extractDocumentation(child),
-                    x: this.toNumber(bounds.x, nodes.length * 180),
-                    y: this.toNumber(bounds.y, 0),
-                    width: this.toNumber(bounds.width, localName === "startEvent" || localName === "endEvent" ? 56 : 120),
-                    height: this.toNumber(bounds.height, localName === "startEvent" || localName === "endEvent" ? 56 : 60),
-                    incomingCount: 0,
-                    outgoingCount: 0
-                });
-                continue;
-            }
-            if (localName === "sequenceFlow") {
-                sequenceFlows.push({
-                    elementId: child.getAttribute("id") || "",
-                    elementName: child.getAttribute("name") || "",
-                    sourceRef: child.getAttribute("sourceRef") || "",
-                    targetRef: child.getAttribute("targetRef") || ""
-                });
-            }
-        }
+        this.collectPreviewFlowElements(processElement, shapeMap, edgeWaypointMap, supportedNodeTypes, nodes, sequenceFlows);
         var nodeMap = {};
         for (var nodeIndex = 0; nodeIndex < nodes.length; nodeIndex += 1) {
             nodeMap[nodes[nodeIndex].elementId] = nodes[nodeIndex];
@@ -706,6 +754,69 @@ window.ProcessDiagramUtils = {
                 width: bounds ? bounds.getAttribute("width") : "",
                 height: bounds ? bounds.getAttribute("height") : ""
             };
+        }
+        return result;
+    },
+    buildEdgeWaypointMap: function (documentNode) {
+        var result = {};
+        var edges = documentNode.getElementsByTagNameNS("*", "BPMNEdge");
+        for (var index = 0; index < edges.length; index += 1) {
+            var edge = edges[index];
+            var elementId = edge.getAttribute("bpmnElement") || "";
+            if (!elementId) {
+                continue;
+            }
+            var waypoints = edge.getElementsByTagNameNS("*", "waypoint");
+            result[elementId] = this.buildPreviewWaypoints(waypoints);
+        }
+        return result;
+    },
+    collectPreviewFlowElements: function (containerElement, shapeMap, edgeWaypointMap, supportedNodeTypes, nodes, sequenceFlows) {
+        var children = containerElement && containerElement.children ? containerElement.children : [];
+        for (var index = 0; index < children.length; index += 1) {
+            var child = children[index];
+            var localName = child.localName || child.nodeName;
+            if (supportedNodeTypes[localName]) {
+                var elementId = child.getAttribute("id") || "";
+                var bounds = shapeMap[elementId] || {};
+                var isEventNode = localName === "startEvent" || localName === "endEvent";
+                nodes.push({
+                    elementId: elementId,
+                    elementName: child.getAttribute("name") || "",
+                    elementType: supportedNodeTypes[localName],
+                    documentation: this.extractDocumentation(child),
+                    x: this.toNumber(bounds.x, nodes.length * 180),
+                    y: this.toNumber(bounds.y, 0),
+                    width: this.toNumber(bounds.width, isEventNode ? 56 : 120),
+                    height: this.toNumber(bounds.height, isEventNode ? 56 : 60),
+                    incomingCount: 0,
+                    outgoingCount: 0
+                });
+                if (localName === "subProcess") {
+                    this.collectPreviewFlowElements(child, shapeMap, edgeWaypointMap, supportedNodeTypes, nodes, sequenceFlows);
+                }
+                continue;
+            }
+            if (localName === "sequenceFlow") {
+                var flowId = child.getAttribute("id") || "";
+                sequenceFlows.push({
+                    elementId: flowId,
+                    elementName: child.getAttribute("name") || "",
+                    sourceRef: child.getAttribute("sourceRef") || "",
+                    targetRef: child.getAttribute("targetRef") || "",
+                    waypoints: edgeWaypointMap[flowId] || []
+                });
+            }
+        }
+    },
+    buildPreviewWaypoints: function (waypointElements) {
+        var result = [];
+        var waypoints = waypointElements || [];
+        for (var index = 0; index < waypoints.length; index += 1) {
+            result.push({
+                x: this.toNumber(waypoints[index].getAttribute("x"), 0),
+                y: this.toNumber(waypoints[index].getAttribute("y"), 0)
+            });
         }
         return result;
     },

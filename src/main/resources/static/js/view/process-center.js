@@ -715,20 +715,49 @@ window.ProcessCenter = {
                 if (!sourceNode || !targetNode) {
                     continue;
                 }
-                var startX = (sourceNode.x || 0) - minX + padding + (sourceNode.width || 120);
-                var startY = (sourceNode.y || 0) - minY + padding + (sourceNode.height || 60) / 2;
-                var endX = (targetNode.x || 0) - minX + padding;
-                var endY = (targetNode.y || 0) - minY + padding + (targetNode.height || 60) / 2;
-                var midX = startX + (endX - startX) / 2;
-                context.beginPath();
-                context.moveTo(startX, startY);
-                context.lineTo(midX, startY);
-                context.lineTo(midX, endY);
-                context.lineTo(endX, endY);
-                context.stroke();
-                this.drawArrowHead(context, endX, endY);
+                if (Array.isArray(edge.waypoints) && edge.waypoints.length >= 2) {
+                    var waypoints = this.normalizeEdgeWaypoints(edge.waypoints, minX, minY, padding);
+                    this.drawEdgePathByWaypoints(context, waypoints);
+                    var lastPoint = waypoints[waypoints.length - 1];
+                    this.drawArrowHead(context, lastPoint.x, lastPoint.y);
+                } else {
+                    var startX = (sourceNode.x || 0) - minX + padding + (sourceNode.width || 120);
+                    var startY = (sourceNode.y || 0) - minY + padding + (sourceNode.height || 60) / 2;
+                    var endX = (targetNode.x || 0) - minX + padding;
+                    var endY = (targetNode.y || 0) - minY + padding + (targetNode.height || 60) / 2;
+                    var midX = startX + (endX - startX) / 2;
+                    context.beginPath();
+                    context.moveTo(startX, startY);
+                    context.lineTo(midX, startY);
+                    context.lineTo(midX, endY);
+                    context.lineTo(endX, endY);
+                    context.stroke();
+                    this.drawArrowHead(context, endX, endY);
+                }
             }
             context.restore();
+        },
+        normalizeEdgeWaypoints: function (waypoints, minX, minY, padding) {
+            var result = [];
+            for (var i = 0; i < waypoints.length; i += 1) {
+                var point = waypoints[i] || {};
+                result.push({
+                    x: (Number(point.x) || 0) - minX + padding,
+                    y: (Number(point.y) || 0) - minY + padding
+                });
+            }
+            return result;
+        },
+        drawEdgePathByWaypoints: function (context, waypoints) {
+            if (!Array.isArray(waypoints) || waypoints.length < 2) {
+                return;
+            }
+            context.beginPath();
+            context.moveTo(waypoints[0].x, waypoints[0].y);
+            for (var i = 1; i < waypoints.length; i += 1) {
+                context.lineTo(waypoints[i].x, waypoints[i].y);
+            }
+            context.stroke();
         },
         drawArrowHead: function (context, x, y) {
             context.beginPath();
