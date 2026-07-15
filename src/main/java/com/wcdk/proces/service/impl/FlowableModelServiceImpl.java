@@ -105,6 +105,7 @@ public class FlowableModelServiceImpl implements FlowableModelService {
         return DeploymentResponse.builder()
                 .deploymentId(deployment.getId())
                 .deploymentName(deployment.getName())
+                .fileName(resourceName)
                 .category(deployment.getCategory())
                 .deployTime(deployment.getDeploymentTime())
                 .build();

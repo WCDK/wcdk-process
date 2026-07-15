@@ -276,9 +276,27 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
         return DeploymentResponse.builder()
                 .deploymentId(deployment.getId())
                 .deploymentName(deployment.getName())
+                .fileName(resolveDeploymentFileName(deployment.getId()))
                 .category(deployment.getCategory())
                 .deployTime(deployment.getDeploymentTime())
                 .build();
+    }
+
+    private String resolveDeploymentFileName(String deploymentId) {
+        if (!StringUtils.hasText(deploymentId)) {
+            return null;
+        }
+        List<String> resourceNames = repositoryService.getDeploymentResourceNames(deploymentId);
+        if (resourceNames == null || resourceNames.isEmpty()) {
+            return null;
+        }
+        for (String resourceName : resourceNames) {
+            if (StringUtils.hasText(resourceName)
+                    && resourceName.toLowerCase(Locale.ROOT).endsWith(".bpmn20.xml")) {
+                return resourceName;
+            }
+        }
+        return resourceNames.get(0);
     }
 
     private ProcessDefinitionResponse buildProcessDefinitionResponse(ProcessDefinition processDefinition, String category) {

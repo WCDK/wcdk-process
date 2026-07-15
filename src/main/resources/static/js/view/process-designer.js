@@ -1,4 +1,4 @@
-﻿var processDesignerStyleId = "process-designer-inline-style";
+﻿var processDesignerStyleId = "wcdk-process-inline-style";
 
 window.ProcessDesigner = {
     template: `
@@ -93,7 +93,7 @@ window.ProcessDesigner = {
                         <div class="designer-stage-head">
                             <div>
                                 <div class="designer-panel-title">流程画布</div>
-                                <div class="designer-panel-subtitle">支持拖拽设置、双击编辑连线、属性面板编排，便于流程设计</div>
+                                <div class="designer-panel-subtitle">支持拖拽设置、编辑连线、属性面板编排，便于流程设计</div>
                             </div>
                             <div class="designer-stage-stats">
                                 <span class="mini-tag">节点数：{{ canvasNodes.length }}</span>
@@ -131,8 +131,13 @@ window.ProcessDesigner = {
                         <div
                             ref="canvasWrapper"
                             class="designer-stage-wrapper"
-                            :class="{ 'designer-stage-wrapper-dragging': !!dragPaletteNode }"
+                            :class="{
+                                'designer-stage-wrapper-dragging': !!dragPaletteNode,
+                                'designer-stage-wrapper-panning': panCanvasState.active
+                            }"
                             @dragover.prevent
+                            @contextmenu.prevent
+                            @mousedown="handleCanvasWrapperMouseDown"
                             @click="handleCanvasClick"
                             @drop="handleCanvasDrop">
                             <div class="designer-stage-viewport" :style="viewportStyle">
@@ -148,7 +153,7 @@ window.ProcessDesigner = {
                                             </marker>
                                         </defs>
                                         <path
-                                            v-for="edge in canvasEdges"
+                                            v-for="edge in visibleCanvasEdges"
                                             :key="edge.id"
                                             class="designer-stage-line"
                                             :class="{ active: selectedEdgeId === edge.id }"
@@ -169,11 +174,59 @@ window.ProcessDesigner = {
                                         <strong>WCDK 流程设计画布</strong>
                                     </div>
 
-                                    <div class="designer-stage-empty" v-if="!canvasNodes.length">
+                                    <div class="designer-stage-empty" v-if="!visibleCanvasNodes.length">
                                         将左侧流程节点拖拽到此处，开始绘制流程。                                    </div>
 
                                     <div
-                                        v-for="node in canvasNodes"
+                                        v-for="node in visibleContainerNodes"
+                                        :key="'container-' + node.id"
+                                        class="designer-stage-node"
+                                        :class="[
+                                            'designer-stage-node-' + node.kind,
+                                            {
+                                                active: selectedNodeId === node.id,
+                                                'designer-stage-node-connect-pending': pendingSourceId === node.id
+                                            }
+                                        ]"
+                                        :style="resolveNodeStyle(node)"
+                                        :data-node-id="node.id"
+                                        @mouseenter="handleNodeMouseEnter(node.id)"
+                                        @mouseleave="handleNodeMouseLeave(node.id)"
+                                        @mousedown.stop.prevent="handleNodeMouseDown(node, $event)"
+                                        @click.stop="handleNodeSelect(node.id)">
+                                        <div class="designer-stage-node-badge">{{ node.bpmnType }}</div>
+                                        <button
+                                            v-if="node.bpmnType === 'subProcess'"
+                                            type="button"
+                                            class="designer-subprocess-toggle"
+                                            :title="node.expanded ? '收起子流程' : '展开子流程'"
+                                            @click.stop="toggleSubProcess(node.id)">
+                                            {{ node.expanded ? "-" : "+" }}
+                                        </button>
+                                        <button
+                                            v-if="selectedNodeId === node.id"
+                                            type="button"
+                                            class="designer-resize-handle"
+                                            title="拖拽调整节点大小"
+                                            @mousedown.stop.prevent="handleResizeMouseDown(node, $event)">
+                                        </button>
+                                        <button
+                                            v-if="shouldShowConnectHandle(node)"
+                                            type="button"
+                                            class="designer-connect-handle"
+                                            title="按住拖拽开始连线"
+                                            @mousedown.stop.prevent="handleConnectHandleMouseDown(node, $event)">
+                                            <span></span>
+                                        </button>
+                                        <div class="designer-stage-node-shape" :class="'designer-shape-' + node.kind">
+                                            <span>{{ node.shortLabel }}</span>
+                                        </div>
+                                        <div class="designer-stage-node-name">{{ node.name }}</div>
+                                        <div class="designer-stage-node-type">{{ node.label }}</div>
+                                    </div>
+
+                                    <div
+                                        v-for="node in visibleLeafNodes"
                                         :key="node.id"
                                         class="designer-stage-node"
                                         :class="[
@@ -190,6 +243,13 @@ window.ProcessDesigner = {
                                         @mousedown.stop.prevent="handleNodeMouseDown(node, $event)"
                                         @click.stop="handleNodeSelect(node.id)">
                                         <div class="designer-stage-node-badge">{{ node.bpmnType }}</div>
+                                        <button
+                                            v-if="selectedNodeId === node.id"
+                                            type="button"
+                                            class="designer-resize-handle"
+                                            title="拖拽调整节点大小"
+                                            @mousedown.stop.prevent="handleResizeMouseDown(node, $event)">
+                                        </button>
                                         <button
                                             v-if="shouldShowConnectHandle(node)"
                                             type="button"
@@ -270,6 +330,23 @@ window.ProcessDesigner = {
                                 <el-form-item label="节点分类">
                                     <el-input :value="selectedNode.label" disabled></el-input>
                                 </el-form-item>
+                                <el-form-item label="所属子流程" v-if="selectedNode.bpmnType !== 'subProcess'">
+                                    <el-select
+                                        v-model="selectedNode.parentId"
+                                        clearable
+                                        filterable
+                                        placeholder="请选择所属子流程">
+                                        <el-option
+                                            v-for="item in availableSubProcessOptions"
+                                            :key="item.id"
+                                            :label="item.name"
+                                            :value="item.id">
+                                        </el-option>
+                                    </el-select>
+                                </el-form-item>
+                                <el-form-item label="父级节点" v-else>
+                                    <el-input :value="resolveParentNodeName(selectedNode.parentId)" disabled></el-input>
+                                </el-form-item>
                                 <el-form-item label="节点说明">
                                     <el-input
                                         v-model.trim="selectedNode.documentation"
@@ -283,6 +360,7 @@ window.ProcessDesigner = {
                                     <span class="mini-tag">坐标 Y：{{ selectedNode.y }}</span>
                                     <span class="mini-tag">宽度：{{ selectedNode.width }}</span>
                                     <span class="mini-tag">高度：{{ selectedNode.height }}</span>
+                                    <span class="mini-tag" v-if="selectedNode.parentId">归属：{{ resolveParentNodeName(selectedNode.parentId) }}</span>
                                 </div>
                                 <div class="form-actions">
                                     <el-button type="danger" @click="handleDeleteSelectedNode">删除节点</el-button>
@@ -568,7 +646,25 @@ window.ProcessDesigner = {
                 active: false,
                 nodeId: "",
                 offsetX: 0,
-                offsetY: 0
+                offsetY: 0,
+                startX: 0,
+                startY: 0,
+                childOffsets: []
+            },
+            resizeNodeState: {
+                active: false,
+                nodeId: "",
+                startPointerX: 0,
+                startPointerY: 0,
+                startWidth: 0,
+                startHeight: 0
+            },
+            panCanvasState: {
+                active: false,
+                startClientX: 0,
+                startClientY: 0,
+                startScrollLeft: 0,
+                startScrollTop: 0
             },
             connectDragState: {
                 active: false,
@@ -608,6 +704,36 @@ window.ProcessDesigner = {
                 return null;
             }
             return this.findNodeById(this.pendingSourceId);
+        },
+        visibleCanvasNodes: function () {
+            var nodes = [];
+            for (var index = 0; index < this.canvasNodes.length; index += 1) {
+                var node = this.canvasNodes[index];
+                if (this.isNodeVisible(node)) {
+                    nodes.push(node);
+                }
+            }
+            return nodes;
+        },
+        visibleContainerNodes: function () {
+            return this.visibleCanvasNodes.filter(function (node) {
+                return node.kind === "container";
+            });
+        },
+        visibleLeafNodes: function () {
+            return this.visibleCanvasNodes.filter(function (node) {
+                return node.kind !== "container";
+            });
+        },
+        visibleCanvasEdges: function () {
+            var edges = [];
+            for (var index = 0; index < this.canvasEdges.length; index += 1) {
+                var edge = this.canvasEdges[index];
+                if (this.isEdgeVisible(edge)) {
+                    edges.push(edge);
+                }
+            }
+            return edges;
         },
         connectPreviewPath: function () {
             if (!this.connectDragState.active || !this.connectDragState.sourceId) {
@@ -655,6 +781,29 @@ window.ProcessDesigner = {
                 height: this.canvasHeight + "px",
                 transform: "scale(" + this.canvasScale + ")"
             };
+        },
+        availableSubProcessOptions: function () {
+            if (!this.selectedNode) {
+                return [];
+            }
+            var options = [];
+            for (var index = 0; index < this.canvasNodes.length; index += 1) {
+                var node = this.canvasNodes[index];
+                if (node.bpmnType !== "subProcess" || node.id === this.selectedNode.id) {
+                    continue;
+                }
+                if (this.isNodeDescendantOf(node.id, this.selectedNode.id)) {
+                    continue;
+                }
+                if (!node.expanded && node.id !== this.selectedNode.parentId) {
+                    continue;
+                }
+                options.push({
+                    id: node.id,
+                    name: node.name || node.code || node.id
+                });
+            }
+            return options;
         },
         selectedElementTypeLabel: function () {
             if (this.selectedNode) {
@@ -716,12 +865,14 @@ window.ProcessDesigner = {
                 ".designer-tool-button:hover{background:#d6e4fb;transform:translateY(-1px);box-shadow:0 10px 18px rgba(52,119,246,0.12);}",
                 ".designer-tool-button-wide{min-width:88px;}",
                 ".designer-toolbar-tip{font-size:12px;color:#6d809d;}",
-                ".designer-stage-wrapper{position:relative;flex:1;min-height:620px;overflow:auto;border:1px dashed #cfdced;border-radius:22px;background:linear-gradient(180deg,#ffffff 0%,#f6faff 100%);}",
+                ".designer-stage-wrapper{position:relative;flex:1;min-height:620px;overflow:auto;border:1px dashed #cfdced;border-radius:22px;background:linear-gradient(180deg,#ffffff 0%,#f6faff 100%);cursor:grab;}",
                 ".designer-stage-wrapper-dragging{border-color:#7eb0ff;box-shadow:inset 0 0 0 2px rgba(52,119,246,0.12);}",
+                ".designer-stage-wrapper-panning{cursor:grabbing;}",
+                ".designer-stage-wrapper-panning .designer-stage-node,.designer-stage-wrapper-panning .designer-stage-line{cursor:grabbing;}",
                 ".designer-stage-viewport{position:relative;}",
                 ".designer-stage-content{position:relative;transform-origin:0 0;}",
                 ".designer-stage-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(148,163,184,0.14) 1px,transparent 1px),linear-gradient(90deg,rgba(148,163,184,0.14) 1px,transparent 1px);background-size:32px 32px;pointer-events:none;}",
-                ".designer-stage-lines{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;}",
+                ".designer-stage-lines{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;z-index:2;}",
                 ".designer-stage-line{fill:none;stroke:#7a93b8;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;cursor:pointer;pointer-events:auto;}",
                 ".designer-stage-line.active{stroke:#3477f6;}",
                 ".designer-stage-line-preview{stroke:#f59e0b;stroke-dasharray:8 6;pointer-events:none;}",
@@ -729,15 +880,18 @@ window.ProcessDesigner = {
                 ".designer-stage-watermark span{font-size:11px;color:#7c8fa9;letter-spacing:1px;}",
                 ".designer-stage-watermark strong{font-size:14px;color:#20324c;}",
                 ".designer-stage-empty{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);padding:18px 22px;border-radius:18px;background:rgba(255,255,255,0.92);border:1px dashed #d7e4f6;color:#70829d;font-size:13px;line-height:1.7;max-width:360px;text-align:center;}",
-                ".designer-stage-node{position:absolute;padding:16px 12px 12px;border-radius:20px;border:2px solid #cfe0f6;background:#ffffff;box-shadow:0 16px 26px rgba(31,45,61,0.10);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:move;user-select:none;transition:border-color .18s ease,box-shadow .18s ease,transform .18s ease;}",
+                ".designer-stage-node{position:absolute;padding:16px 12px 12px;border-radius:20px;border:2px solid #cfe0f6;background:#ffffff;box-shadow:0 16px 26px rgba(31,45,61,0.10);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;user-select:none;transition:border-color .18s ease,box-shadow .18s ease,transform .18s ease;z-index:3;}",
                 ".designer-stage-node.active{border-color:#3477f6;box-shadow:0 20px 32px rgba(52,119,246,0.18);transform:translateY(-1px);}",
                 ".designer-stage-node-connect-pending{border-color:#f59e0b;box-shadow:0 20px 32px rgba(245,158,11,0.18);}",
                 ".designer-stage-node-event{border-radius:999px;background:linear-gradient(180deg,#effcf5 0%,#dcfce7 100%);}",
                 ".designer-stage-node-task{background:linear-gradient(180deg,#f8fbff 0%,#e7f0ff 100%);}",
                 ".designer-stage-node-gateway{background:linear-gradient(180deg,#fff8ec 0%,#ffedd5 100%);}",
-                ".designer-stage-node-container{background:linear-gradient(180deg,#f5f7ff 0%,#e9edff 100%);}",
+                ".designer-stage-node-container{background:linear-gradient(180deg,#f5f7ff 0%,#e9edff 100%);z-index:1;}",
                 ".designer-stage-node-artifact{background:linear-gradient(180deg,#fffdf5 0%,#fff8d9 100%);}",
                 ".designer-stage-node-badge{position:absolute;top:-12px;padding:3px 10px;border-radius:999px;background:#e9f1ff;color:#2a61bf;font-size:11px;font-weight:700;box-shadow:0 8px 18px rgba(52,119,246,0.10);}",
+                ".designer-subprocess-toggle{position:absolute;right:10px;top:10px;width:26px;height:26px;border:none;border-radius:8px;background:rgba(227,235,247,0.92);color:#30445f;font-size:16px;font-weight:700;line-height:1;cursor:pointer;box-shadow:0 8px 16px rgba(52,119,246,0.10);}",
+                ".designer-subprocess-toggle:hover{background:#d6e4fb;}",
+                ".designer-resize-handle{position:absolute;right:8px;bottom:8px;width:16px;height:16px;border:none;border-radius:4px;background:linear-gradient(135deg,#d6e4fb 0%,#3477f6 100%);cursor:nwse-resize;box-shadow:0 8px 14px rgba(52,119,246,0.18);}",
                 ".designer-connect-handle{position:absolute;left:50%;top:50%;width:34px;height:34px;margin-left:-17px;margin-top:-17px;border:none;border-radius:50%;background:linear-gradient(180deg,#ffffff 0%,#fef3c7 100%);box-shadow:0 10px 18px rgba(245,158,11,0.22);display:flex;align-items:center;justify-content:center;cursor:crosshair;z-index:3;}",
                 ".designer-connect-handle span{position:relative;display:block;width:16px;height:16px;}",
                 ".designer-connect-handle span:before,.designer-connect-handle span:after{content:'';position:absolute;background:#d97706;border-radius:999px;}",
@@ -806,7 +960,7 @@ window.ProcessDesigner = {
                 pad(now.getMinutes()),
                 pad(now.getSeconds())
             ].join("");
-            return "process-designer-" + timestamp + "." + extension;
+            return "wcdk-process-" + timestamp + "." + extension;
         },
         escapeXml: function (value) {
             return String(value == null ? "" : value)
@@ -849,6 +1003,61 @@ window.ProcessDesigner = {
                 URL.revokeObjectURL(url);
             }, 0);
         },
+        buildProcessDesignerExportPayload: function (format) {
+            var nodes = [];
+            var edges = [];
+            for (var nodeIndex = 0; nodeIndex < this.canvasNodes.length; nodeIndex += 1) {
+                var node = this.canvasNodes[nodeIndex];
+                nodes.push({
+                    id: node.id,
+                    type: node.type,
+                    bpmnType: node.bpmnType,
+                    kind: node.kind,
+                    label: node.label,
+                    shortLabel: node.shortLabel,
+                    name: node.name,
+                    code: node.code,
+                    documentation: node.documentation,
+                    parentId: node.parentId,
+                    expanded: !!node.expanded,
+                    width: node.width,
+                    height: node.height,
+                    x: node.x,
+                    y: node.y
+                });
+            }
+            for (var edgeIndex = 0; edgeIndex < this.canvasEdges.length; edgeIndex += 1) {
+                var edge = this.canvasEdges[edgeIndex];
+                edges.push({
+                    id: edge.id,
+                    sourceId: edge.sourceId,
+                    targetId: edge.targetId,
+                    name: edge.name
+                });
+            }
+            return {
+                format: format,
+                canvasWidth: this.canvasWidth,
+                canvasHeight: this.canvasHeight,
+                nodes: nodes,
+                edges: edges
+            };
+        },
+        decodeBase64ToBlob: function (contentBase64, contentType) {
+            var binary = window.atob(contentBase64 || "");
+            var bytes = new Uint8Array(binary.length);
+            for (var index = 0; index < binary.length; index += 1) {
+                bytes[index] = binary.charCodeAt(index);
+            }
+            return new Blob([bytes], {type: contentType || "application/octet-stream"});
+        },
+        requestProcessDesignerExport: async function (format) {
+            var result = await window.AppService.requestJson("/flowable/designer/export", {
+                method: "POST",
+                body: JSON.stringify(this.buildProcessDesignerExportPayload(format))
+            });
+            return result.data || null;
+        },
         collectExportableNodes: function () {
             var supportedTypes = {
                 startEvent: true,
@@ -886,12 +1095,318 @@ window.ProcessDesigner = {
                 skippedNodes: skippedNodes
             };
         },
+        resolveParentNodeName: function (parentId) {
+            if (!parentId) {
+                return "主流程";
+            }
+            var parentNode = this.findNodeById(parentId);
+            return parentNode ? (parentNode.name || parentNode.code || parentNode.id) : "主流程";
+        },
+        resolveNodeContainerId: function (nodeId) {
+            var node = this.findNodeById(nodeId);
+            return node && node.parentId ? node.parentId : "";
+        },
+        keepNodeInsideParent: function (node) {
+            if (!node || !node.parentId) {
+                return;
+            }
+            var parentNode = this.findNodeById(node.parentId);
+            if (!parentNode) {
+                return;
+            }
+            var padding = 16;
+            var minX = parentNode.x + padding;
+            var minY = parentNode.y + 44;
+            var maxX = parentNode.x + parentNode.width - node.width - padding;
+            var maxY = parentNode.y + parentNode.height - node.height - padding;
+            node.x = Math.max(minX, Math.min(node.x, Math.max(maxX, minX)));
+            node.y = Math.max(minY, Math.min(node.y, Math.max(maxY, minY)));
+        },
+        getNodeMinimumWidth: function (node) {
+            if (!node) {
+                return 80;
+            }
+            if (node.kind === "event") {
+                return 72;
+            }
+            if (node.kind === "gateway") {
+                return 88;
+            }
+            if (node.bpmnType === "subProcess") {
+                return 220;
+            }
+            return 120;
+        },
+        getNodeMinimumHeight: function (node) {
+            if (!node) {
+                return 60;
+            }
+            if (node.kind === "event") {
+                return 72;
+            }
+            if (node.kind === "gateway") {
+                return 88;
+            }
+            if (node.bpmnType === "subProcess") {
+                return 160;
+            }
+            return 72;
+        },
+        getDescendantNodes: function (parentId) {
+            var descendants = [];
+            if (!parentId) {
+                return descendants;
+            }
+            for (var index = 0; index < this.canvasNodes.length; index += 1) {
+                var node = this.canvasNodes[index];
+                if (this.isNodeDescendantOf(node.id, parentId)) {
+                    descendants.push(node);
+                }
+            }
+            return descendants;
+        },
+        buildChildOffsetSnapshot: function (parentNode) {
+            var result = [];
+            var descendants = this.getDescendantNodes(parentNode.id);
+            for (var index = 0; index < descendants.length; index += 1) {
+                result.push({
+                    id: descendants[index].id,
+                    offsetX: descendants[index].x - parentNode.x,
+                    offsetY: descendants[index].y - parentNode.y
+                });
+            }
+            return result;
+        },
+        moveChildNodesWithParent: function (parentNode) {
+            if (!parentNode || !this.dragNodeState.childOffsets || !this.dragNodeState.childOffsets.length) {
+                return;
+            }
+            for (var index = 0; index < this.dragNodeState.childOffsets.length; index += 1) {
+                var item = this.dragNodeState.childOffsets[index];
+                var childNode = this.findNodeById(item.id);
+                if (!childNode) {
+                    continue;
+                }
+                childNode.x = this.normalizeCanvasX(parentNode.x + item.offsetX, childNode.width);
+                childNode.y = this.normalizeCanvasY(parentNode.y + item.offsetY, childNode.height);
+                this.keepNodeInsideParent(childNode);
+            }
+        },
+        expandSubProcessSize: function (node) {
+            if (!node || node.bpmnType !== "subProcess") {
+                return;
+            }
+            if (!node.collapsedWidth) {
+                node.collapsedWidth = node.width;
+            }
+            if (!node.collapsedHeight) {
+                node.collapsedHeight = node.height;
+            }
+            if (!node.expandedWidth) {
+                node.expandedWidth = Math.max(node.width, node.collapsedWidth + 120, 320);
+            }
+            if (!node.expandedHeight) {
+                node.expandedHeight = Math.max(node.height, node.collapsedHeight + 100, 220);
+            }
+            node.width = Math.max(node.expandedWidth, node.collapsedWidth + 120, 320);
+            node.height = Math.max(node.expandedHeight, node.collapsedHeight + 100, 220);
+        },
+        collapseSubProcessSize: function (node) {
+            if (!node || node.bpmnType !== "subProcess") {
+                return;
+            }
+            if (node.collapsedWidth) {
+                node.width = node.collapsedWidth;
+            }
+            if (node.collapsedHeight) {
+                node.height = node.collapsedHeight;
+            }
+        },
+        isNodeVisible: function (node) {
+            if (!node) {
+                return false;
+            }
+            var currentParentId = node.parentId;
+            var guard = 0;
+            while (currentParentId && guard < this.canvasNodes.length) {
+                var parentNode = this.findNodeById(currentParentId);
+                if (!parentNode) {
+                    return false;
+                }
+                if (!parentNode.expanded) {
+                    return false;
+                }
+                currentParentId = parentNode.parentId;
+                guard += 1;
+            }
+            return true;
+        },
+        isEdgeVisible: function (edge) {
+            if (!edge) {
+                return false;
+            }
+            return this.isNodeVisible(this.findNodeById(edge.sourceId))
+                && this.isNodeVisible(this.findNodeById(edge.targetId));
+        },
+        isNodeDescendantOf: function (nodeId, targetAncestorId) {
+            if (!nodeId || !targetAncestorId || nodeId === targetAncestorId) {
+                return false;
+            }
+            var currentNode = this.findNodeById(nodeId);
+            var guard = 0;
+            while (currentNode && currentNode.parentId && guard < this.canvasNodes.length) {
+                if (currentNode.parentId === targetAncestorId) {
+                    return true;
+                }
+                currentNode = this.findNodeById(currentNode.parentId);
+                guard += 1;
+            }
+            return false;
+        },
+        resolveDropParentSubProcessId: function (rawX, rawY) {
+            var matchedNode = null;
+            for (var index = 0; index < this.canvasNodes.length; index += 1) {
+                var node = this.canvasNodes[index];
+                if (node.bpmnType !== "subProcess") {
+                    continue;
+                }
+                if (!node.expanded) {
+                    continue;
+                }
+                if (rawX < node.x || rawX > node.x + node.width || rawY < node.y || rawY > node.y + node.height) {
+                    continue;
+                }
+                if (!matchedNode || (node.width * node.height) < (matchedNode.width * matchedNode.height)) {
+                    matchedNode = node;
+                }
+            }
+            return matchedNode ? matchedNode.id : "";
+        },
+        buildExportNodeLookup: function (exportableNodes) {
+            var lookup = {};
+            for (var index = 0; index < exportableNodes.length; index += 1) {
+                lookup[exportableNodes[index].id] = exportableNodes[index];
+            }
+            return lookup;
+        },
+        sanitizeNodeParentRelations: function (exportableNodes, exportableNodeLookup) {
+            for (var index = 0; index < exportableNodes.length; index += 1) {
+                var node = exportableNodes[index];
+                if (!node.parentId) {
+                    continue;
+                }
+                var parentNode = exportableNodeLookup[node.parentId];
+                if (!parentNode || parentNode.bpmnType !== "subProcess" || parentNode.id === node.id || this.isNodeDescendantOf(parentNode.id, node.id)) {
+                    node.parentId = "";
+                }
+            }
+        },
+        validateNodeParentRelation: function (node) {
+            if (!node || !node.parentId) {
+                return true;
+            }
+            var parentNode = this.findNodeById(node.parentId);
+            if (!parentNode) {
+                node.parentId = "";
+                return true;
+            }
+            if (parentNode.bpmnType !== "subProcess") {
+                node.parentId = "";
+                this.$message.warning("仅支持归属到子流程节点");
+                return false;
+            }
+            if (!parentNode.expanded) {
+                node.parentId = "";
+                this.$message.warning("子流程展开后才可添加内部节点");
+                return false;
+            }
+            if (parentNode.id === node.id || this.isNodeDescendantOf(parentNode.id, node.id)) {
+                node.parentId = "";
+                this.$message.warning("子流程归属不能形成循环层级");
+                return false;
+            }
+            return true;
+        },
+        toggleSubProcess: function (nodeId) {
+            var node = this.findNodeById(nodeId);
+            if (!node || node.bpmnType !== "subProcess") {
+                return;
+            }
+            node.expanded = !node.expanded;
+            if (node.expanded) {
+                this.expandSubProcessSize(node);
+            } else {
+                this.collapseSubProcessSize(node);
+            }
+            if (!node.expanded && this.selectedNode && this.isNodeDescendantOf(this.selectedNode.id, nodeId)) {
+                this.selectedNodeId = nodeId;
+            }
+            if (!node.expanded && this.selectedEdge && !this.isEdgeVisible(this.selectedEdge)) {
+                this.selectedEdgeId = "";
+            }
+            if (!node.expanded) {
+                this.pendingSourceId = this.resolveNodeContainerId(this.pendingSourceId) === nodeId ? "" : this.pendingSourceId;
+            }
+        },
+        buildFlowContainerMaps: function (exportableNodes, sequenceFlows) {
+            var nodeChildrenMap = {};
+            var flowChildrenMap = {};
+            for (var index = 0; index < exportableNodes.length; index += 1) {
+                var node = exportableNodes[index];
+                var containerId = node.parentId || "";
+                if (!nodeChildrenMap[containerId]) {
+                    nodeChildrenMap[containerId] = [];
+                }
+                nodeChildrenMap[containerId].push(node);
+            }
+            for (var flowIndex = 0; flowIndex < sequenceFlows.length; flowIndex += 1) {
+                var flow = sequenceFlows[flowIndex];
+                var flowContainerId = flow.containerId || "";
+                if (!flowChildrenMap[flowContainerId]) {
+                    flowChildrenMap[flowContainerId] = [];
+                }
+                flowChildrenMap[flowContainerId].push(flow);
+            }
+            return {
+                nodeChildrenMap: nodeChildrenMap,
+                flowChildrenMap: flowChildrenMap
+            };
+        },
+        appendContainerFlowElements: function (lines, containerId, nodeChildrenMap, flowChildrenMap, nodeTagMap, nodeIdMap, incomingMap, outgoingMap) {
+            var childNodes = nodeChildrenMap[containerId || ""] || [];
+            for (var nodeIndex = 0; nodeIndex < childNodes.length; nodeIndex += 1) {
+                var node = childNodes[nodeIndex];
+                var nodeTag = nodeTagMap[node.bpmnType] || "task";
+                lines.push('    <bpmn:' + nodeTag + ' id="' + nodeIdMap[node.id] + '" name="' + this.escapeXml(node.name || node.label || node.code) + '">');
+                if (node.documentation) {
+                    lines.push('      <bpmn:documentation>' + this.escapeXml(node.documentation) + '</bpmn:documentation>');
+                }
+                var incomingFlows = incomingMap[node.id] || [];
+                for (var incomingIndex = 0; incomingIndex < incomingFlows.length; incomingIndex += 1) {
+                    lines.push('      <bpmn:incoming>' + incomingFlows[incomingIndex] + '</bpmn:incoming>');
+                }
+                var outgoingFlows = outgoingMap[node.id] || [];
+                for (var outgoingIndex = 0; outgoingIndex < outgoingFlows.length; outgoingIndex += 1) {
+                    lines.push('      <bpmn:outgoing>' + outgoingFlows[outgoingIndex] + '</bpmn:outgoing>');
+                }
+                if (node.bpmnType === "subProcess") {
+                    this.appendContainerFlowElements(lines, node.id, nodeChildrenMap, flowChildrenMap, nodeTagMap, nodeIdMap, incomingMap, outgoingMap);
+                }
+                lines.push('    </bpmn:' + nodeTag + '>');
+            }
+            var containerFlows = flowChildrenMap[containerId || ""] || [];
+            for (var flowIndex = 0; flowIndex < containerFlows.length; flowIndex += 1) {
+                var flow = containerFlows[flowIndex];
+                var namePart = flow.name ? ' name="' + this.escapeXml(flow.name) + '"' : "";
+                lines.push('    <bpmn:sequenceFlow id="' + flow.id + '"' + namePart + ' sourceRef="' + nodeIdMap[flow.sourceId] + '" targetRef="' + nodeIdMap[flow.targetId] + '" />');
+            }
+        },
         buildBpmnXmlContent: function () {
             var collected = this.collectExportableNodes();
             var exportableNodes = collected.exportableNodes;
             var skippedNodes = collected.skippedNodes;
             var usedIds = {};
-            var processId = this.sanitizeBpmnId("Process_" + Date.now(), "Process", usedIds);
+            var processId = this.sanitizeBpmnId("Wcdk_" + Date.now(), "Process", usedIds);
             var definitionsId = this.sanitizeBpmnId("Definitions_" + Date.now(), "Definitions", usedIds);
             var diagramId = this.sanitizeBpmnId(processId + "_Diagram", "Diagram", usedIds);
             var planeId = this.sanitizeBpmnId(processId + "_Plane", "Plane", usedIds);
@@ -919,16 +1434,21 @@ window.ProcessDesigner = {
             };
             var incomingMap = {};
             var outgoingMap = {};
-            var exportableNodeLookup = {};
+            var exportableNodeLookup = this.buildExportNodeLookup(exportableNodes);
+            this.sanitizeNodeParentRelations(exportableNodes, exportableNodeLookup);
             for (var nodeIndex = 0; nodeIndex < exportableNodes.length; nodeIndex += 1) {
                 var exportNode = exportableNodes[nodeIndex];
-                exportableNodeLookup[exportNode.id] = exportNode;
                 nodeIdMap[exportNode.id] = this.sanitizeBpmnId(exportNode.code || exportNode.id, "FlowNode", usedIds);
             }
             var sequenceFlows = [];
-            for (var edgeIndex = 0; edgeIndex < this.canvasEdges.length; edgeIndex += 1) {
-                var edge = this.canvasEdges[edgeIndex];
+            for (var edgeIndex = 0; edgeIndex < this.visibleCanvasEdges.length; edgeIndex += 1) {
+                var edge = this.visibleCanvasEdges[edgeIndex];
                 if (!exportableNodeLookup[edge.sourceId] || !exportableNodeLookup[edge.targetId]) {
+                    continue;
+                }
+                var sourceContainerId = this.resolveNodeContainerId(edge.sourceId);
+                var targetContainerId = this.resolveNodeContainerId(edge.targetId);
+                if (sourceContainerId !== targetContainerId) {
                     continue;
                 }
                 var flowId = this.sanitizeBpmnId("Flow_" + edge.sourceId + "_" + edge.targetId, "SequenceFlow", usedIds);
@@ -936,7 +1456,8 @@ window.ProcessDesigner = {
                     id: flowId,
                     sourceId: edge.sourceId,
                     targetId: edge.targetId,
-                    name: edge.name || ""
+                    name: edge.name || "",
+                    containerId: sourceContainerId
                 });
                 if (!outgoingMap[edge.sourceId]) {
                     outgoingMap[edge.sourceId] = [];
@@ -956,30 +1477,19 @@ window.ProcessDesigner = {
                 '                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"',
                 '                  id="' + definitionsId + '"',
                 '                  targetNamespace="http://flowable.org/processdef">',
-                '  <bpmn:process id="' + processId + '" name="流程设计导出" isExecutable="true">'
+                '  <bpmn:process id="' + processId + '" name="wcdk-process-' + processId + '" isExecutable="true">'
             ];
-            for (var flowNodeIndex = 0; flowNodeIndex < exportableNodes.length; flowNodeIndex += 1) {
-                var node = exportableNodes[flowNodeIndex];
-                var nodeTag = nodeTagMap[node.bpmnType] || "task";
-                lines.push('    <bpmn:' + nodeTag + ' id="' + nodeIdMap[node.id] + '" name="' + this.escapeXml(node.name || node.label || node.code) + '">');
-                if (node.documentation) {
-                    lines.push('      <bpmn:documentation>' + this.escapeXml(node.documentation) + '</bpmn:documentation>');
-                }
-                var incomingFlows = incomingMap[node.id] || [];
-                for (var incomingIndex = 0; incomingIndex < incomingFlows.length; incomingIndex += 1) {
-                    lines.push('      <bpmn:incoming>' + incomingFlows[incomingIndex] + '</bpmn:incoming>');
-                }
-                var outgoingFlows = outgoingMap[node.id] || [];
-                for (var outgoingIndex = 0; outgoingIndex < outgoingFlows.length; outgoingIndex += 1) {
-                    lines.push('      <bpmn:outgoing>' + outgoingFlows[outgoingIndex] + '</bpmn:outgoing>');
-                }
-                lines.push('    </bpmn:' + nodeTag + '>');
-            }
-            for (var flowIndex = 0; flowIndex < sequenceFlows.length; flowIndex += 1) {
-                var flow = sequenceFlows[flowIndex];
-                var namePart = flow.name ? ' name="' + this.escapeXml(flow.name) + '"' : "";
-                lines.push('    <bpmn:sequenceFlow id="' + flow.id + '"' + namePart + ' sourceRef="' + nodeIdMap[flow.sourceId] + '" targetRef="' + nodeIdMap[flow.targetId] + '" />');
-            }
+            var containerMaps = this.buildFlowContainerMaps(exportableNodes, sequenceFlows);
+            this.appendContainerFlowElements(
+                lines,
+                "",
+                containerMaps.nodeChildrenMap,
+                containerMaps.flowChildrenMap,
+                nodeTagMap,
+                nodeIdMap,
+                incomingMap,
+                outgoingMap
+            );
             lines.push('  </bpmn:process>');
             lines.push('  <bpmndi:BPMNDiagram id="' + diagramId + '">');
             lines.push('    <bpmndi:BPMNPlane id="' + planeId + '" bpmnElement="' + processId + '">');
@@ -1054,20 +1564,40 @@ window.ProcessDesigner = {
                 this.$message.warning("请先在画布中添加流程节点后再导出");
                 return;
             }
-            var exportData = this.buildBpmnXmlContent();
-            this.downloadTextFile(this.buildExportFileName("bpmn"), exportData.xml, "application/xml;charset=utf-8");
-            this.notifySkippedBpmnNodes(exportData.skippedNodes);
-            this.$message.success("BPMN 文件已开始下载");
+            var self = this;
+            this.requestProcessDesignerExport("bpmn").then(function (exportData) {
+                if (!exportData) {
+                    throw new Error("BPMN 导出失败");
+                }
+                self.downloadBlobFile(
+                    exportData.fileName || "wcdk-process.bpmn",
+                    self.decodeBase64ToBlob(exportData.contentBase64, exportData.contentType)
+                );
+                self.notifySkippedBpmnNodes(exportData.skippedNodeLabels || []);
+                self.$message.success("BPMN 文件已开始下载");
+            }).catch(function (error) {
+                self.$message.error(error && error.message ? error.message : "BPMN 导出失败");
+            });
         },
         handleExportBpmnXml: function () {
             if (!this.canvasNodes.length) {
                 this.$message.warning("请先在画布中添加流程节点后再导出");
                 return;
             }
-            var exportData = this.buildBpmnXmlContent();
-            this.downloadTextFile(this.buildExportFileName("bpmn.xml"), exportData.xml, "application/xml;charset=utf-8");
-            this.notifySkippedBpmnNodes(exportData.skippedNodes);
-            this.$message.success("BPMN.XML 文件已开始下载");
+            var self = this;
+            this.requestProcessDesignerExport("bpmn20.xml").then(function (exportData) {
+                if (!exportData) {
+                    throw new Error("BPMN.XML 导出失败");
+                }
+                self.downloadBlobFile(
+                    exportData.fileName || "wcdk-process.bpmn20.xml",
+                    self.decodeBase64ToBlob(exportData.contentBase64, exportData.contentType)
+                );
+                self.notifySkippedBpmnNodes(exportData.skippedNodeLabels || []);
+                self.$message.success("BPMN.XML 文件已开始下载");
+            }).catch(function (error) {
+                self.$message.error(error && error.message ? error.message : "BPMN.XML 导出失败");
+            });
         },
         resolveExportBounds: function () {
             var bounds = this.resolveCanvasBounds();
@@ -1148,8 +1678,8 @@ window.ProcessDesigner = {
                     }
                 }
             }
-            for (var nodeIndex = 0; nodeIndex < this.canvasNodes.length; nodeIndex += 1) {
-                svgParts.push(this.resolveSvgNodeMarkup(this.canvasNodes[nodeIndex]));
+            for (var nodeIndex = 0; nodeIndex < this.visibleCanvasNodes.length; nodeIndex += 1) {
+                svgParts.push(this.resolveSvgNodeMarkup(this.visibleCanvasNodes[nodeIndex]));
             }
             svgParts.push("</svg>");
             return svgParts.join("");
@@ -1198,8 +1728,14 @@ window.ProcessDesigner = {
                 this.$message.warning("请先在画布中添加流程节点后再导出");
                 return;
             }
-            this.renderPngBlob().then(function (blob) {
-                self.downloadBlobFile(self.buildExportFileName("png"), blob);
+            this.requestProcessDesignerExport("png").then(function (exportData) {
+                if (!exportData) {
+                    throw new Error("PNG 导出失败");
+                }
+                self.downloadBlobFile(
+                    exportData.fileName || "wcdk-process.png",
+                    self.decodeBase64ToBlob(exportData.contentBase64, exportData.contentType)
+                );
                 self.$message.success("PNG 文件已开始下载");
             }).catch(function (error) {
                 self.$message.error(error && error.message ? error.message : "PNG 导出失败");
@@ -1259,6 +1795,8 @@ window.ProcessDesigner = {
             var rawX = (event.clientX - rect.left + wrapper.scrollLeft) / this.canvasScale;
             var rawY = (event.clientY - rect.top + wrapper.scrollTop) / this.canvasScale;
             var node = this.createCanvasNode(this.dragPaletteNode, rawX, rawY);
+            node.parentId = this.resolveDropParentSubProcessId(rawX, rawY);
+            this.keepNodeInsideParent(node);
             this.canvasNodes.push(node);
             this.selectedNodeId = node.id;
             this.selectedEdgeId = "";
@@ -1282,6 +1820,12 @@ window.ProcessDesigner = {
                 name: paletteNode.label + nodeIndex,
                 code: this.buildFlowableCode(paletteNode.bpmnType, nodeIndex),
                 documentation: "",
+                parentId: "",
+                expanded: false,
+                collapsedWidth: paletteNode.bpmnType === "subProcess" ? width : 0,
+                collapsedHeight: paletteNode.bpmnType === "subProcess" ? height : 0,
+                expandedWidth: paletteNode.bpmnType === "subProcess" ? Math.max(width + 120, 320) : 0,
+                expandedHeight: paletteNode.bpmnType === "subProcess" ? Math.max(height + 100, 220) : 0,
                 width: width,
                 height: height,
                 x: this.normalizeCanvasX(rawX - width / 2, width),
@@ -1351,7 +1895,10 @@ window.ProcessDesigner = {
             };
         },
         shouldShowConnectHandle: function (node) {
-            return !!node && node.allowOutgoing && (this.hoverNodeId === node.id || this.connectDragState.sourceId === node.id);
+            return !!node
+                && node.allowOutgoing
+                && this.isNodeVisible(node)
+                && (this.hoverNodeId === node.id || this.connectDragState.sourceId === node.id);
         },
         handleNodeSelect: function (nodeId) {
             this.selectedNodeId = nodeId;
@@ -1372,6 +1919,9 @@ window.ProcessDesigner = {
             }
         },
         handleConnectHandleMouseDown: function (node, event) {
+            if (!event || event.button !== 0) {
+                return;
+            }
             var wrapper = this.$refs.canvasWrapper;
             if (!wrapper || !node || !node.allowOutgoing) {
                 return;
@@ -1412,6 +1962,11 @@ window.ProcessDesigner = {
                 this.$message.warning("当前终点节点不能接收顺序流");
                 return false;
             }
+            if (this.resolveNodeContainerId(sourceId) !== this.resolveNodeContainerId(targetId)) {
+                this.pendingSourceId = "";
+                this.$message.warning("顺序流不能直接跨子流程边界连接");
+                return false;
+            }
             if (this.hasEdge(sourceId, targetId)) {
                 this.$message.warning("该连线已存在");
                 this.pendingSourceId = "";
@@ -1428,6 +1983,13 @@ window.ProcessDesigner = {
         handleDeleteSelectedNode: function () {
             if (!this.selectedNodeId) {
                 return;
+            }
+            var selectedNode = this.findNodeById(this.selectedNodeId);
+            var fallbackParentId = selectedNode && selectedNode.parentId ? selectedNode.parentId : "";
+            for (var updateIndex = 0; updateIndex < this.canvasNodes.length; updateIndex += 1) {
+                if (this.canvasNodes[updateIndex].parentId === this.selectedNodeId) {
+                    this.canvasNodes[updateIndex].parentId = fallbackParentId;
+                }
             }
             var nextNodes = [];
             for (var index = 0; index < this.canvasNodes.length; index += 1) {
@@ -1460,12 +2022,47 @@ window.ProcessDesigner = {
             this.$message.success("连线已删除");
         },
         handleCanvasClick: function () {
-            if (this.connectDragState.active) {
+            if (this.connectDragState.active || this.panCanvasState.active) {
                 return;
             }
             this.pendingSourceId = "";
             this.selectedNodeId = "";
             this.selectedEdgeId = "";
+        },
+        handleCanvasWrapperMouseDown: function (event) {
+            if (!event || event.button !== 2) {
+                return;
+            }
+            var wrapper = this.$refs.canvasWrapper;
+            if (!wrapper) {
+                return;
+            }
+            event.preventDefault();
+            this.panCanvasState.active = true;
+            this.panCanvasState.startClientX = event.clientX;
+            this.panCanvasState.startClientY = event.clientY;
+            this.panCanvasState.startScrollLeft = wrapper.scrollLeft;
+            this.panCanvasState.startScrollTop = wrapper.scrollTop;
+        },
+        handleDocumentKeyDown: function (event) {
+            if (!event || event.key !== "Delete") {
+                return;
+            }
+            var target = event.target;
+            var tagName = target && target.tagName ? String(target.tagName).toUpperCase() : "";
+            var isEditable = !!(target && (target.isContentEditable || tagName === "INPUT" || tagName === "TEXTAREA"));
+            if (isEditable) {
+                return;
+            }
+            if (this.selectedNodeId) {
+                event.preventDefault();
+                this.handleDeleteSelectedNode();
+                return;
+            }
+            if (this.selectedEdgeId) {
+                event.preventDefault();
+                this.handleDeleteSelectedEdge();
+            }
         },
         resolveCanvasPointer: function (event) {
             var wrapper = this.$refs.canvasWrapper;
@@ -1479,7 +2076,17 @@ window.ProcessDesigner = {
             };
         },
         handleNodeMouseDown: function (node, event) {
-            if (this.connectDragState.active) {
+            if (event && event.button === 2) {
+                this.handleCanvasWrapperMouseDown(event);
+                return;
+            }
+            if (!event || event.button !== 0) {
+                return;
+            }
+            if (this.connectDragState.active || this.resizeNodeState.active) {
+                return;
+            }
+            if (!this.isNodeVisible(node)) {
                 return;
             }
             var wrapper = this.$refs.canvasWrapper;
@@ -1491,8 +2098,36 @@ window.ProcessDesigner = {
             this.dragNodeState.nodeId = node.id;
             this.dragNodeState.offsetX = (event.clientX - wrapper.getBoundingClientRect().left + wrapper.scrollLeft) / this.canvasScale - node.x;
             this.dragNodeState.offsetY = (event.clientY - wrapper.getBoundingClientRect().top + wrapper.scrollTop) / this.canvasScale - node.y;
+            this.dragNodeState.startX = node.x;
+            this.dragNodeState.startY = node.y;
+            this.dragNodeState.childOffsets = node.bpmnType === "subProcess" ? this.buildChildOffsetSnapshot(node) : [];
+        },
+        handleResizeMouseDown: function (node, event) {
+            if (!event || event.button !== 0) {
+                return;
+            }
+            if (!node || !this.isNodeVisible(node)) {
+                return;
+            }
+            var pointer = this.resolveCanvasPointer(event);
+            this.selectedNodeId = node.id;
+            this.resizeNodeState.active = true;
+            this.resizeNodeState.nodeId = node.id;
+            this.resizeNodeState.startPointerX = pointer.x;
+            this.resizeNodeState.startPointerY = pointer.y;
+            this.resizeNodeState.startWidth = node.width;
+            this.resizeNodeState.startHeight = node.height;
         },
         handleDocumentMouseMove: function (event) {
+            if (this.panCanvasState.active) {
+                var panWrapper = this.$refs.canvasWrapper;
+                if (!panWrapper) {
+                    return;
+                }
+                panWrapper.scrollLeft = Math.max(this.panCanvasState.startScrollLeft - (event.clientX - this.panCanvasState.startClientX), 0);
+                panWrapper.scrollTop = Math.max(this.panCanvasState.startScrollTop - (event.clientY - this.panCanvasState.startClientY), 0);
+                return;
+            }
             if (this.connectDragState.active) {
                 var pointer = this.resolveCanvasPointer(event);
                 this.connectDragState.currentX = pointer.x;
@@ -1502,6 +2137,28 @@ window.ProcessDesigner = {
                 if (hoveredNodeId) {
                     this.hoverNodeId = hoveredNodeId;
                 }
+                return;
+            }
+            if (this.resizeNodeState.active) {
+                var resizeNode = this.findNodeById(this.resizeNodeState.nodeId);
+                if (!resizeNode) {
+                    return;
+                }
+                var resizePointer = this.resolveCanvasPointer(event);
+                var nextWidth = this.resizeNodeState.startWidth + (resizePointer.x - this.resizeNodeState.startPointerX);
+                var nextHeight = this.resizeNodeState.startHeight + (resizePointer.y - this.resizeNodeState.startPointerY);
+                resizeNode.width = Math.max(this.getNodeMinimumWidth(resizeNode), Math.round(nextWidth));
+                resizeNode.height = Math.max(this.getNodeMinimumHeight(resizeNode), Math.round(nextHeight));
+                if (resizeNode.bpmnType === "subProcess") {
+                    if (resizeNode.expanded) {
+                        resizeNode.expandedWidth = resizeNode.width;
+                        resizeNode.expandedHeight = resizeNode.height;
+                    } else {
+                        resizeNode.collapsedWidth = resizeNode.width;
+                        resizeNode.collapsedHeight = resizeNode.height;
+                    }
+                }
+                this.keepNodeInsideParent(resizeNode);
                 return;
             }
             if (!this.dragNodeState.active) {
@@ -1517,6 +2174,10 @@ window.ProcessDesigner = {
             var nextY = (event.clientY - rect.top + wrapper.scrollTop) / this.canvasScale - this.dragNodeState.offsetY;
             node.x = this.normalizeCanvasX(nextX, node.width);
             node.y = this.normalizeCanvasY(nextY, node.height);
+            this.keepNodeInsideParent(node);
+            if (node.bpmnType === "subProcess") {
+                this.moveChildNodesWithParent(node);
+            }
         },
         resolveNodeIdFromEventTarget: function (event) {
             if (!event || typeof document.elementFromPoint !== "function") {
@@ -1530,6 +2191,10 @@ window.ProcessDesigner = {
             return nodeElement ? nodeElement.getAttribute("data-node-id") || "" : "";
         },
         handleDocumentMouseUp: function () {
+            if (this.panCanvasState.active) {
+                this.panCanvasState.active = false;
+                return;
+            }
             if (this.connectDragState.active) {
                 var sourceId = this.connectDragState.sourceId;
                 var targetId = this.connectDragState.targetNodeId;
@@ -1543,8 +2208,14 @@ window.ProcessDesigner = {
                 }
                 return;
             }
+            if (this.resizeNodeState.active) {
+                this.resizeNodeState.active = false;
+                this.resizeNodeState.nodeId = "";
+                return;
+            }
             this.dragNodeState.active = false;
             this.dragNodeState.nodeId = "";
+            this.dragNodeState.childOffsets = [];
         },
         createCanvasEdge: function (sourceId, targetId) {
             return {
@@ -1586,6 +2257,38 @@ window.ProcessDesigner = {
             this.canvasEdges = nextEdges;
             if (shouldClearSelectedEdge) {
                 this.selectedEdgeId = "";
+            }
+        },
+        removeIncompatibleEdgesForNode: function (nodeId) {
+            if (!nodeId) {
+                return;
+            }
+            var currentContainerId = this.resolveNodeContainerId(nodeId);
+            var nextEdges = [];
+            var removedCount = 0;
+            var shouldClearSelectedEdge = false;
+            for (var index = 0; index < this.canvasEdges.length; index += 1) {
+                var edge = this.canvasEdges[index];
+                if (edge.sourceId !== nodeId && edge.targetId !== nodeId) {
+                    nextEdges.push(edge);
+                    continue;
+                }
+                var otherNodeId = edge.sourceId === nodeId ? edge.targetId : edge.sourceId;
+                if (this.resolveNodeContainerId(otherNodeId) === currentContainerId) {
+                    nextEdges.push(edge);
+                    continue;
+                }
+                removedCount += 1;
+                if (this.selectedEdgeId === edge.id) {
+                    shouldClearSelectedEdge = true;
+                }
+            }
+            if (removedCount > 0) {
+                this.canvasEdges = nextEdges;
+                if (shouldClearSelectedEdge) {
+                    this.selectedEdgeId = "";
+                }
+                this.$message.warning("节点归属变更后，已自动移除跨子流程边界的连线");
             }
         },
         findNodeById: function (nodeId) {
@@ -1675,7 +2378,7 @@ window.ProcessDesigner = {
             this.setCanvasScale(1);
         },
         resolveCanvasBounds: function () {
-            if (!this.canvasNodes.length) {
+            if (!this.visibleCanvasNodes.length) {
                 return {
                     left: 0,
                     top: 0,
@@ -1687,8 +2390,8 @@ window.ProcessDesigner = {
             var top = this.canvasHeight;
             var right = 0;
             var bottom = 0;
-            for (var index = 0; index < this.canvasNodes.length; index += 1) {
-                var node = this.canvasNodes[index];
+            for (var index = 0; index < this.visibleCanvasNodes.length; index += 1) {
+                var node = this.visibleCanvasNodes[index];
                 left = Math.min(left, node.x);
                 top = Math.min(top, node.y);
                 right = Math.max(right, node.x + node.width);
@@ -1734,10 +2437,24 @@ window.ProcessDesigner = {
         }
         document.addEventListener("mousemove", this.handleDocumentMouseMove);
         document.addEventListener("mouseup", this.handleDocumentMouseUp);
+        document.addEventListener("keydown", this.handleDocumentKeyDown);
         this.$nextTick(this.handleCenterCanvas);
     },
     beforeDestroy: function () {
         document.removeEventListener("mousemove", this.handleDocumentMouseMove);
         document.removeEventListener("mouseup", this.handleDocumentMouseUp);
+        document.removeEventListener("keydown", this.handleDocumentKeyDown);
+    },
+    watch: {
+        "selectedNode.parentId": function () {
+            if (!this.selectedNode) {
+                return;
+            }
+            if (!this.validateNodeParentRelation(this.selectedNode)) {
+                return;
+            }
+            this.keepNodeInsideParent(this.selectedNode);
+            this.removeIncompatibleEdgesForNode(this.selectedNode.id);
+        }
     }
 };

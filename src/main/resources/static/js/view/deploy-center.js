@@ -5,7 +5,7 @@ window.DeployCenter = {
                 <div class="panel-head">
                     <div>
                         <div class="section-kicker">流程部署管理</div>
-                        <h2>部署中心</h2>
+                        <h2>部署中心</h2> <div class="section-kicker">(同一个流程文件反复上传 会覆盖旧的部署信息保)</div>
                     </div>
                     <el-button @click="handleRefresh">刷新</el-button>
                 </div>
@@ -70,6 +70,11 @@ window.DeployCenter = {
                                 @sort-change="handleSortChange">
                                 <el-table-column prop="deploymentId" label="部署编号" min-width="180"></el-table-column>
                                 <el-table-column prop="deploymentName" label="流程名称" min-width="180" sortable="custom"></el-table-column>
+                                <el-table-column prop="fileName" label="文件名" min-width="220" sortable="custom">
+                                    <template slot-scope="scope">
+                                        {{ scope.row.fileName || "-" }}
+                                    </template>
+                                </el-table-column>
                                 <el-table-column prop="category" label="流程分类" min-width="140" sortable="custom">
                                     <template slot-scope="scope">
                                         {{ scope.row.category || "-" }}
@@ -130,6 +135,7 @@ window.DeployCenter = {
                         </div>
 
                         <div class="detail-meta-list">
+                            <span class="mini-tag">文件名：{{ selectedDeployment.fileName || "-" }}</span>
                             <span class="mini-tag">分类：{{ selectedDeployment.category || "未分类" }}</span>
                             <span class="mini-tag">部署时间：{{ formatDateTime(selectedDeployment.deployTime) }}</span>
                         </div>

@@ -18,6 +18,8 @@ public class DeploymentResponse {
 
     private String deploymentName;
 
+    private String fileName;
+
     private String category;
 
     private Date deployTime;
