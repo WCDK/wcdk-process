@@ -1,4 +1,12 @@
+/**
+ * @auther WCDK
+ * @date 2026/7/15
+ * @version 1.0
+ **/
 (function () {
+    var TOKEN_KEY = "wcdk_process_token";
+    var USER_KEY = "wcdk_process_current_user";
+
     async function readResponseBody(response) {
         var contentType = response.headers.get("Content-Type") || "";
         if (contentType.indexOf("application/json") >= 0) {
@@ -23,22 +31,78 @@
         }
     }
 
+    function getToken() {
+        return window.localStorage.getItem(TOKEN_KEY) || "";
+    }
+
+    function setToken(token) {
+        if (token) {
+            window.localStorage.setItem(TOKEN_KEY, token);
+            return;
+        }
+        window.localStorage.removeItem(TOKEN_KEY);
+    }
+
+    function getCurrentUserCache() {
+        var raw = window.localStorage.getItem(USER_KEY);
+        if (!raw) {
+            return null;
+        }
+        try {
+            return JSON.parse(raw);
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function setCurrentUserCache(currentUser) {
+        if (currentUser) {
+            window.localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
+            return;
+        }
+        window.localStorage.removeItem(USER_KEY);
+    }
+
+    function clearAuth() {
+        setToken("");
+        setCurrentUserCache(null);
+    }
+
+    function buildHeaders(options) {
+        var headers = new Headers((options && options.headers) || {});
+        var token = getToken();
+        if (token) {
+            headers.set("X-Auth-Token", token);
+        }
+        return headers;
+    }
+
+    function handleUnauthorized(response, result) {
+        if (response.status === 401 || response.status === 403 || (result && (result.code === 401 || result.code === 403))) {
+            clearAuth();
+            if (window.location.hash !== "#/login") {
+                window.location.hash = "#/login";
+            }
+        }
+    }
+
     function unwrapResult(response, result) {
-        if (!response.ok || (typeof result.code === "number" && result.code >= 400)) {
+        handleUnauthorized(response, result);
+        if (!response.ok || (result && typeof result.code === "number" && result.code >= 400)) {
             throw new Error((result && result.message) || "请求失败");
         }
         return result;
     }
 
     async function request(url, options) {
-        var response = await fetch(url, options || {});
+        var response = await fetch(url, Object.assign({}, options || {}, {
+            headers: buildHeaders(options)
+        }));
         var result = await readResponseBody(response);
         if (!result) {
             result = {
                 code: response.ok ? 200 : response.status,
-                message: response.ok
-                    ? "处理成功"
-                    : ("请求失败，协议状态码：" + response.status),
+                message: response.ok ? "处理成功" : ("请求失败，状态码：" + response.status),
                 data: null
             };
         }
@@ -47,7 +111,7 @@
 
     function requestJson(url, options) {
         var requestOptions = options || {};
-        var headers = new Headers(requestOptions.headers || {});
+        var headers = buildHeaders(requestOptions);
         headers.set("Content-Type", "application/json;charset=UTF-8");
         return request(url, Object.assign({}, requestOptions, { headers: headers }));
     }
@@ -90,11 +154,28 @@
         return mapping[status] || status || "-";
     }
 
+    function hasPermission(permissionCode, currentUser) {
+        if (!permissionCode) {
+            return true;
+        }
+        var user = currentUser || getCurrentUserCache();
+        var permissionCodes = (user && user.permissionCodes) || [];
+        return permissionCodes.indexOf(permissionCode) >= 0
+            || permissionCodes.indexOf("*") >= 0
+            || permissionCodes.indexOf("*:*:*") >= 0;
+    }
+
     window.AppService = {
         request: request,
         requestJson: requestJson,
         formatDateTime: formatDateTime,
         resolveStatusType: resolveStatusType,
-        resolveStatusLabel: resolveStatusLabel
+        resolveStatusLabel: resolveStatusLabel,
+        getToken: getToken,
+        setToken: setToken,
+        getCurrentUserCache: getCurrentUserCache,
+        setCurrentUserCache: setCurrentUserCache,
+        clearAuth: clearAuth,
+        hasPermission: hasPermission
     };
 })();

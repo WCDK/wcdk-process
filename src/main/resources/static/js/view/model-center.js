@@ -1,3 +1,8 @@
+/**
+ * @auther WCDK
+ * @date 2026/7/15
+ * @version 1.0
+ **/
 window.ModelCenter = {
     template: `
         <section class="route-section">

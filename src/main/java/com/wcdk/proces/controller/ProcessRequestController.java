@@ -18,13 +18,16 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * @auther WCDK
+ * @date 2026/7/15
+ * @version 1.0
+ **/
 @RestController
 @RequestMapping("/process/request")
 @RequiredArgsConstructor
-@Tag(
-        name = "流程申请",
-        description = "创建、提交、查询、审批和删除流程申请"
-)
+@Tag(name = "流程申请",description = "创建、提交、查询、审批和删除流程申请")
 public class ProcessRequestController {
 
     private final ProcessRequestService processRequestService;

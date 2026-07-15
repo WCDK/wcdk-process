@@ -12,7 +12,11 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
+/**
+ * @auther WCDK
+ * @date 2026/7/15
+ * @version 1.0
+ **/
 @RestController
 @RequestMapping("/sdk/wcdkproces")
 @RequiredArgsConstructor

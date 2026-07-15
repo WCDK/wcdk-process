@@ -1,4 +1,9 @@
-﻿var processDesignerStyleId = "wcdk-process-inline-style";
+﻿/**
+ * @auther WCDK
+ * @date 2026/7/15
+ * @version 1.0
+ **/
+var processDesignerStyleId = "wcdk-process-inline-style";
 
 window.ProcessDesigner = {
     template: `
@@ -679,7 +684,9 @@ window.ProcessDesigner = {
             canvasWidth: 2400,
             canvasHeight: 1400,
             leftPanelCollapsed: false,
-            rightPanelCollapsed: false
+            rightPanelCollapsed: false,
+            importedProcessDefinitionId: "",
+            importedDeploymentId: ""
         };
     },
     computed: {
@@ -1057,6 +1064,216 @@ window.ProcessDesigner = {
                 body: JSON.stringify(this.buildProcessDesignerExportPayload(format))
             });
             return result.data || null;
+        },
+        loadRouteProcessDefinitionIfNeeded: async function () {
+            var route = this.$route || {};
+            var query = route.query || {};
+            var processDefinitionId = query.processDefinitionId || "";
+            var deploymentId = query.deploymentId || "";
+            if (!processDefinitionId) {
+                this.importedProcessDefinitionId = "";
+                this.importedDeploymentId = deploymentId;
+                this.$nextTick(this.handleCenterCanvas);
+                return;
+            }
+            if (this.importedProcessDefinitionId === processDefinitionId && this.importedDeploymentId === deploymentId) {
+                this.$nextTick(this.handleCenterCanvas);
+                return;
+            }
+            try {
+                var detail = await this.$root.fetchProcessDefinitionDetail(processDefinitionId);
+                this.importProcessDefinitionDetail(detail, deploymentId);
+                this.importedProcessDefinitionId = processDefinitionId;
+                this.importedDeploymentId = deploymentId;
+                this.$message.success("已加载部署流程到设计画布");
+            } catch (error) {
+                this.$message.error(error && error.message ? error.message : "加载部署流程失败");
+            }
+        },
+        importProcessDefinitionDetail: function (detail, deploymentId) {
+            if (!detail) {
+                throw new Error("未查询到流程定义详情");
+            }
+            var detailNodes = Array.isArray(detail.nodes) ? detail.nodes : [];
+            var detailEdges = Array.isArray(detail.sequenceFlows) ? detail.sequenceFlows : [];
+            var parentMap = this.buildImportedParentMap(detail.bpmnXml);
+            var childCountMap = {};
+            for (var parentNodeId in parentMap) {
+                if (Object.prototype.hasOwnProperty.call(parentMap, parentNodeId) && parentMap[parentNodeId]) {
+                    childCountMap[parentMap[parentNodeId]] = (childCountMap[parentMap[parentNodeId]] || 0) + 1;
+                }
+            }
+            var nodes = [];
+            var maxRight = 0;
+            var maxBottom = 0;
+            for (var nodeIndex = 0; nodeIndex < detailNodes.length; nodeIndex += 1) {
+                var importedNode = this.buildImportedCanvasNode(
+                    detailNodes[nodeIndex],
+                    parentMap[detailNodes[nodeIndex].elementId] || "",
+                    !!childCountMap[detailNodes[nodeIndex].elementId]
+                );
+                nodes.push(importedNode);
+                maxRight = Math.max(maxRight, importedNode.x + importedNode.width);
+                maxBottom = Math.max(maxBottom, importedNode.y + importedNode.height);
+            }
+            var edges = [];
+            for (var edgeIndex = 0; edgeIndex < detailEdges.length; edgeIndex += 1) {
+                var sequenceFlow = detailEdges[edgeIndex] || {};
+                edges.push({
+                    id: sequenceFlow.elementId || ("designer-edge-" + sequenceFlow.sourceRef + "-" + sequenceFlow.targetRef),
+                    sourceId: sequenceFlow.sourceRef || "",
+                    targetId: sequenceFlow.targetRef || "",
+                    name: sequenceFlow.elementName || ""
+                });
+            }
+            this.canvasNodes = nodes;
+            this.canvasEdges = edges;
+            this.selectedNodeId = "";
+            this.selectedEdgeId = "";
+            this.pendingSourceId = "";
+            this.hoverNodeId = "";
+            this.nextNodeIndex = nodes.length + 1;
+            this.canvasScale = 1;
+            this.canvasWidth = Math.max(2400, Math.ceil(maxRight + 240));
+            this.canvasHeight = Math.max(1400, Math.ceil(maxBottom + 240));
+            this.importedDeploymentId = deploymentId || detail.deploymentId || "";
+            this.$nextTick(this.handleCenterCanvas);
+        },
+        buildImportedCanvasNode: function (detailNode, parentId, expanded) {
+            var bpmnType = this.resolveImportedBpmnType(detailNode && detailNode.elementType);
+            var paletteNode = this.findPaletteNodeByBpmnType(bpmnType);
+            var width = Math.max(this.toFiniteNumber(detailNode && detailNode.width, paletteNode.width), paletteNode.width);
+            var height = Math.max(this.toFiniteNumber(detailNode && detailNode.height, paletteNode.height), paletteNode.height);
+            return {
+                id: detailNode && detailNode.elementId ? detailNode.elementId : ("designer-node-" + this.nextNodeIndex),
+                type: paletteNode.type,
+                bpmnType: paletteNode.bpmnType,
+                kind: paletteNode.kind,
+                allowIncoming: this.isNodeIncomingAllowed(paletteNode.bpmnType),
+                allowOutgoing: this.isNodeOutgoingAllowed(paletteNode.bpmnType),
+                allowSequenceFlow: this.isSequenceFlowNode(paletteNode.bpmnType),
+                label: paletteNode.label,
+                shortLabel: paletteNode.shortLabel,
+                name: detailNode && detailNode.elementName ? detailNode.elementName : paletteNode.label,
+                code: detailNode && detailNode.elementId ? detailNode.elementId : this.buildFlowableCode(paletteNode.bpmnType, this.nextNodeIndex),
+                documentation: detailNode && detailNode.documentation ? detailNode.documentation : "",
+                parentId: parentId || "",
+                expanded: paletteNode.bpmnType === "subProcess" ? !!expanded : false,
+                collapsedWidth: paletteNode.bpmnType === "subProcess" ? width : 0,
+                collapsedHeight: paletteNode.bpmnType === "subProcess" ? height : 0,
+                expandedWidth: paletteNode.bpmnType === "subProcess" ? Math.max(width, 320) : 0,
+                expandedHeight: paletteNode.bpmnType === "subProcess" ? Math.max(height, 220) : 0,
+                width: width,
+                height: height,
+                x: Math.max(Math.round(this.toFiniteNumber(detailNode && detailNode.x, 0)), 0),
+                y: Math.max(Math.round(this.toFiniteNumber(detailNode && detailNode.y, 0)), 0)
+            };
+        },
+        buildImportedParentMap: function (bpmnXml) {
+            if (!bpmnXml) {
+                return {};
+            }
+            var parser = new DOMParser();
+            var documentNode = parser.parseFromString(bpmnXml, "text/xml");
+            var parseError = documentNode.getElementsByTagName("parsererror");
+            if (parseError && parseError.length) {
+                return {};
+            }
+            var processElement = this.findFirstElementByLocalName(documentNode, "process");
+            if (!processElement) {
+                return {};
+            }
+            var parentMap = {};
+            this.collectImportedParentMap(processElement, "", parentMap);
+            return parentMap;
+        },
+        collectImportedParentMap: function (containerElement, parentId, parentMap) {
+            var children = containerElement && containerElement.children ? containerElement.children : [];
+            for (var index = 0; index < children.length; index += 1) {
+                var child = children[index];
+                var localName = child.localName || child.nodeName || "";
+                var bpmnType = this.resolveImportedBpmnType(localName);
+                if (!bpmnType) {
+                    continue;
+                }
+                var elementId = child.getAttribute("id") || "";
+                if (!elementId) {
+                    continue;
+                }
+                parentMap[elementId] = parentId || "";
+                if (bpmnType === "subProcess") {
+                    this.collectImportedParentMap(child, elementId, parentMap);
+                }
+            }
+        },
+        findPaletteNodeByBpmnType: function (bpmnType) {
+            var allPaletteNodes = this.getAllPaletteNodes();
+            for (var index = 0; index < allPaletteNodes.length; index += 1) {
+                if (allPaletteNodes[index].bpmnType === bpmnType) {
+                    return allPaletteNodes[index];
+                }
+            }
+            return {
+                type: bpmnType || "userTask",
+                bpmnType: bpmnType || "userTask",
+                label: bpmnType || "任务",
+                shortLabel: "节点",
+                description: "",
+                kind: "task",
+                width: 120,
+                height: 72
+            };
+        },
+        resolveImportedBpmnType: function (elementType) {
+            var typeMap = {
+                StartEvent: "startEvent",
+                startEvent: "startEvent",
+                EndEvent: "endEvent",
+                endEvent: "endEvent",
+                BoundaryEvent: "boundaryEvent",
+                boundaryEvent: "boundaryEvent",
+                IntermediateCatchEvent: "intermediateCatchEvent",
+                intermediateCatchEvent: "intermediateCatchEvent",
+                IntermediateThrowEvent: "intermediateThrowEvent",
+                intermediateThrowEvent: "intermediateThrowEvent",
+                UserTask: "userTask",
+                userTask: "userTask",
+                ScriptTask: "scriptTask",
+                scriptTask: "scriptTask",
+                ServiceTask: "serviceTask",
+                serviceTask: "serviceTask",
+                MailTask: "mailTask",
+                mailTask: "mailTask",
+                ManualTask: "manualTask",
+                manualTask: "manualTask",
+                ReceiveTask: "receiveTask",
+                receiveTask: "receiveTask",
+                BusinessRuleTask: "businessRuleTask",
+                businessRuleTask: "businessRuleTask",
+                CallActivity: "callActivity",
+                callActivity: "callActivity",
+                SubProcess: "subProcess",
+                subProcess: "subProcess",
+                ParallelGateway: "parallelGateway",
+                parallelGateway: "parallelGateway",
+                ExclusiveGateway: "exclusiveGateway",
+                exclusiveGateway: "exclusiveGateway",
+                InclusiveGateway: "inclusiveGateway",
+                inclusiveGateway: "inclusiveGateway",
+                EventGateway: "eventGateway",
+                eventGateway: "eventGateway",
+                TextAnnotation: "textAnnotation",
+                textAnnotation: "textAnnotation"
+            };
+            return typeMap[elementType] || "";
+        },
+        findFirstElementByLocalName: function (root, localName) {
+            var elements = root.getElementsByTagNameNS("*", localName);
+            return elements && elements.length ? elements[0] : null;
+        },
+        toFiniteNumber: function (value, fallback) {
+            var nextValue = Number(value);
+            return Number.isFinite(nextValue) ? nextValue : fallback;
         },
         collectExportableNodes: function () {
             var supportedTypes = {
@@ -2429,7 +2646,7 @@ window.ProcessDesigner = {
             wrapper.scrollTop = Math.max(centerY * this.canvasScale - wrapper.clientHeight / 2, 0);
         }
     },
-    mounted: function () {
+    mounted: async function () {
         this.ensureStyle();
         this.ensureExpandedGroups();
         for (var index = 0; index < this.nodeGroups.length; index += 1) {
@@ -2438,6 +2655,7 @@ window.ProcessDesigner = {
         document.addEventListener("mousemove", this.handleDocumentMouseMove);
         document.addEventListener("mouseup", this.handleDocumentMouseUp);
         document.addEventListener("keydown", this.handleDocumentKeyDown);
+        await this.loadRouteProcessDefinitionIfNeeded();
         this.$nextTick(this.handleCenterCanvas);
     },
     beforeDestroy: function () {
@@ -2446,6 +2664,11 @@ window.ProcessDesigner = {
         document.removeEventListener("keydown", this.handleDocumentKeyDown);
     },
     watch: {
+        $route: function () {
+            if (this.$route && this.$route.path === "/designer") {
+                this.loadRouteProcessDefinitionIfNeeded();
+            }
+        },
         "selectedNode.parentId": function () {
             if (!this.selectedNode) {
                 return;

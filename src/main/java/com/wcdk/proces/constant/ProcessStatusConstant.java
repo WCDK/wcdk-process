@@ -1,5 +1,9 @@
 package com.wcdk.proces.constant;
-
+/**
+ * @auther WCDK
+ * @date 2026/7/15
+ * @version 1.0
+ **/
 public final class ProcessStatusConstant {
 
     public static final String DRAFT = "DRAFT";

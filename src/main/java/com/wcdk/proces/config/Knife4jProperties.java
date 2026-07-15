@@ -1,7 +1,11 @@
 package com.wcdk.proces.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
-
+/**
+ * @auther WCDK
+ * @date 2026/7/15
+ * @version 1.0
+ **/
 @ConfigurationProperties(prefix = "wcdk.iot.swagger")
 public class Knife4jProperties {
 

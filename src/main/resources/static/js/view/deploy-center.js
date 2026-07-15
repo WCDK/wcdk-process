@@ -1,3 +1,8 @@
+/**
+ * @auther WCDK
+ * @date 2026/7/15
+ * @version 1.0
+ **/
 window.DeployCenter = {
     template: `
         <section class="route-section">
@@ -11,7 +16,7 @@ window.DeployCenter = {
                 </div>
 
                 <el-tabs v-model="activeTab" class="center-tabs">
-                    <el-tab-pane label="部署流程" name="create">
+                    <el-tab-pane label="创建部署" name="create">
                         <el-form label-position="top" @submit.native.prevent="submitDeployment">
                             <div class="form-grid">
                                 <el-form-item label="流程名称">
@@ -24,7 +29,7 @@ window.DeployCenter = {
                                     <div class="upload-tip">命名规则：四到五十个字符，支持中文、字母、数字、点、减号、下划线和中英文括号。</div>
                                 </el-form-item>
                                 <el-form-item label="流程分类">
-                                    <el-input v-model.trim="form.category" placeholder="例如：流程审批"></el-input>
+                                    <el-input v-model.trim="form.category" placeholder="示例：人事流程"></el-input>
                                 </el-form-item>
                                 <el-form-item label="流程定义文件">
                                     <el-upload
@@ -41,19 +46,36 @@ window.DeployCenter = {
                                         <div slot="tip" class="upload-tip">仅支持流程定义文件，扩展名可为 .xml、.bpmn、.bpmn20.xml。</div>
                                     </el-upload>
                                 </el-form-item>
+                                 <el-form-item label="流程描述">
+                                    <el-input
+                                        v-model.trim="form.description"
+                                        type="textarea"
+                                        :rows="4"
+                                        placeholder="请输入流程描述">
+                                    </el-input>
+                                </el-form-item>
                             </div>
                             <div class="form-actions">
-                                <el-button type="primary" @click="submitDeployment">执行部署</el-button>
-                                <el-button @click="resetForm">重置</el-button>
+                                <el-button type="primary" @click="submitDeployment">提交部署</el-button>
+                                <el-button @click="resetForm">重置表单</el-button>
                             </div>
                         </el-form>
                     </el-tab-pane>
 
-                    <el-tab-pane label="部署列表" name="list">
+                    <el-tab-pane label="流程列表" name="list">
                         <div class="process-list-panel">
                             <el-form inline class="process-filter-form" @submit.native.prevent="handleQuery">
-                                <el-form-item label="流程名称">
-                                    <el-input v-model.trim="filters.deploymentName" placeholder="请输入流程名称"></el-input>
+                                <el-form-item label="流程部署名称">
+                                    <el-input v-model.trim="filters.deploymentName" placeholder="请输入流程部署名称"></el-input>
+                                </el-form-item>
+                                <el-form-item label="流程分类">
+                                    <el-input v-model.trim="filters.category" placeholder="请输入流程分类"></el-input>
+                                </el-form-item>
+                                <el-form-item>
+                                    <el-button type="primary" @click="handleQuery">查询</el-button>
+                                </el-form-item>
+                            </el-form>
+                        </div>
                                 </el-form-item>
                                 <el-form-item label="流程分类">
                                     <el-input v-model.trim="filters.category" placeholder="请输入流程分类"></el-input>
@@ -68,9 +90,9 @@ window.DeployCenter = {
                                 :data="pagedDeployments"
                                 stripe
                                 @sort-change="handleSortChange">
-                                <el-table-column prop="deploymentId" label="部署编号" min-width="180"></el-table-column>
-                                <el-table-column prop="deploymentName" label="流程名称" min-width="180" sortable="custom"></el-table-column>
-                                <el-table-column prop="fileName" label="文件名" min-width="220" sortable="custom">
+                                <el-table-column prop="deploymentId" label="流程部署ID" min-width="180"></el-table-column>
+                                <el-table-column prop="deploymentName" label="流程部署名称" min-width="180" sortable="custom"></el-table-column>
+                                <el-table-column prop="fileName" label="文件名称" min-width="220" sortable="custom">
                                     <template slot-scope="scope">
                                         {{ scope.row.fileName || "-" }}
                                     </template>
@@ -87,6 +109,7 @@ window.DeployCenter = {
                                 </el-table-column>
                                 <el-table-column label="操作" min-width="160" fixed="right">
                                     <template slot-scope="scope">
+                                        <el-button type="text" @click.stop="handleEdit(scope.row)">编辑</el-button>
                                         <el-button type="text" @click.stop="handleView(scope.row)">查看</el-button>
                                         <el-button type="text" @click.stop="handlePreview(scope.row)">预览</el-button>
                                         <el-button type="text" @click.stop="handleDelete(scope.row.deploymentId)">删除</el-button>
@@ -120,24 +143,24 @@ window.DeployCenter = {
                                 <div class="section-kicker">部署详情</div>
                                 <h3>{{ selectedDeployment.deploymentName || "未命名部署" }}</h3>
                             </div>
-                            <el-tag size="small" effect="plain">已部署</el-tag>
+                            <el-tag size="small" effect="plain">流程分类</el-tag>
                         </div>
 
                         <div class="detail-stat-grid">
                             <div class="detail-stat-card">
-                                <span class="detail-stat-label">部署编号</span>
+                                <span class="detail-stat-label">部署ID</span>
                                 <strong>{{ selectedDeployment.deploymentId || "-" }}</strong>
                             </div>
                             <div class="detail-stat-card">
-                                <span class="detail-stat-label">关联定义数</span>
+                                <span class="detail-stat-label">关联流程定义数</span>
                                 <strong>{{ relatedDefinitions.length }}</strong>
                             </div>
                         </div>
 
                         <div class="detail-meta-list">
-                            <span class="mini-tag">文件名：{{ selectedDeployment.fileName || "-" }}</span>
-                            <span class="mini-tag">分类：{{ selectedDeployment.category || "未分类" }}</span>
-                            <span class="mini-tag">部署时间：{{ formatDateTime(selectedDeployment.deployTime) }}</span>
+                            <span class="mini-tag">文件名: {{ selectedDeployment.fileName || "-" }}</span>
+                            <span class="mini-tag">分类: {{ selectedDeployment.category || "无分类" }}</span>
+                            <span class="mini-tag">部署时间: {{ formatDateTime(selectedDeployment.deployTime) }}</span>
                         </div>
 
                         <div class="detail-section" v-if="relatedDefinitions.length">
@@ -165,10 +188,10 @@ window.DeployCenter = {
                     <div v-if="previewDetail" class="process-detail-shell">
                         <div class="process-detail-head">
                             <div>
-                                <div class="section-kicker">部署流程图预览</div>
-                                <h3>{{ previewDetail.processDefinitionName || previewDetail.processDefinitionKey || "未命名流程" }}</h3>
+                                <div class="section-kicker">流程定义</div>
+                                <h3>{{ previewDetail.processDefinitionName || previewDetail.processDefinitionKey || "未知流程" }}</h3>
                             </div>
-                            <el-tag size="small" effect="plain">第 {{ previewDetail.version || 1 }} 版</el-tag>
+                            <el-tag size="small" effect="plain">版本: {{ previewDetail.version || 1 }}</el-tag>
                         </div>
 
                         <div class="process-stat-grid">
@@ -177,15 +200,15 @@ window.DeployCenter = {
                                 <strong>{{ previewDetail.deploymentName || "-" }}</strong>
                             </div>
                             <div class="process-stat-card">
-                                <span class="process-stat-label">节点数</span>
+                                <span class="process-stat-label">节点数量</span>
                                 <strong>{{ previewDetail.nodeCount || 0 }}</strong>
                             </div>
                             <div class="process-stat-card">
-                                <span class="process-stat-label">用户任务</span>
+                                <span class="process-stat-label">用户任务数量</span>
                                 <strong>{{ previewDetail.userTaskCount || 0 }}</strong>
                             </div>
                             <div class="process-stat-card">
-                                <span class="process-stat-label">连线数</span>
+                                <span class="process-stat-label">流程连线数量</span>
                                 <strong>{{ previewDetail.sequenceFlowCount || 0 }}</strong>
                             </div>
                         </div>
@@ -198,7 +221,7 @@ window.DeployCenter = {
                         </div>
 
                         <div class="detail-section" v-if="previewDefinitions.length > 1">
-                            <div class="detail-section-title">关联流程定义</div>
+                            <div class="detail-section-title">流程定义</div>
                             <div class="schema-chip-list">
                                 <span
                                     v-for="definition in previewDefinitions"
@@ -319,14 +342,14 @@ window.DeployCenter = {
             if (!this.previewDeploymentId) {
                 return "";
             }
-            return this.findModelByDeploymentId(this.previewDeploymentId) ? "关联模型源码" : "已部署流程定义";
+            return this.findModelByDeploymentId(this.previewDeploymentId) ? "MODEL_SOURCE" : "DEPLOYED_DEFINITION";
         }
     },
     methods: {
         formatDateTime: window.AppService.formatDateTime,
         resolveDefinitionLabel: function (definition) {
-            var name = definition.processDefinitionName || definition.processDefinitionKey || "未命名流程";
-            return name + " 第 " + (definition.version || 1) + " 版";
+            var name = definition.processDefinitionName || definition.processDefinitionKey || "Unnamed Process";
+            return name + " V" + (definition.version || 1);
         },
         sortItems: function (list) {
             var prop = this.sortProp;
@@ -360,19 +383,19 @@ window.DeployCenter = {
             this.fileList = [];
         },
         handleFileExceed: function () {
-            this.$root.showError("一次只允许上传一个流程定义文件");
+            this.$root.showError("Only one file can be uploaded at a time");
         },
         validateDeploymentName: function () {
             var deploymentName = (this.form.deploymentName || "").trim();
-            var deploymentNamePattern = /^(?=.*[A-Za-z0-9\u4e00-\u9fa5])[A-Za-z0-9\u4e00-\u9fa5._\-()（）]{4,50}$/;
+            var deploymentNamePattern = /^(?=.*[A-Za-z0-9\u4e00-\u9fa5])[A-Za-z0-9\u4e00-\u9fa5._\-()]{4,50}$/;
             if (!deploymentName) {
-                return "流程名称不能为空";
+                return "Deployment name is required";
             }
             if (deploymentName.length < 4 || deploymentName.length > 50) {
-                return "流程名称长度必须在四到五十个字符之间";
+                return "Deployment name length must be between 4 and 50 characters";
             }
             if (!deploymentNamePattern.test(deploymentName)) {
-                return "流程名称仅支持中文、字母、数字、点、减号、下划线和中英文括号";
+                return "Deployment name only supports Chinese, letters, numbers, dots, hyphens, underscores and parentheses";
             }
             return "";
         },
@@ -392,7 +415,7 @@ window.DeployCenter = {
                 return;
             }
             if (!this.selectedFile) {
-                this.$root.showError("请选择流程定义文件");
+                this.$root.showError("Please select a process definition file");
                 return;
             }
             try {
@@ -404,15 +427,15 @@ window.DeployCenter = {
                 this.resetForm();
                 this.selectFirstDeployment();
             } catch (error) {
-                this.$root.showError(error.message || "流程部署失败");
+                this.$root.showError(error.message || "Deployment failed");
             }
         },
         handleDelete: function (deploymentId) {
             var self = this;
-            this.$confirm("删除部署会同时清除关联流程定义和运行数据，是否继续？", "删除部署", {
+            this.$confirm("Deleting this deployment will also remove related process definitions and runtime data. Continue?", "Delete Deployment", {
                 type: "warning",
-                confirmButtonText: "确定删除",
-                cancelButtonText: "取消"
+                confirmButtonText: "Delete",
+                cancelButtonText: "Cancel"
             }).then(async function () {
                 await self.$root.deleteDeployment(deploymentId);
                 if (self.selectedDeploymentId === deploymentId) {
@@ -456,11 +479,29 @@ window.DeployCenter = {
             this.selectedDeploymentId = row.deploymentId;
             this.detailDialogVisible = true;
         },
+        handleEdit: function (row) {
+            var targetDeploymentId = row && row.deploymentId ? row.deploymentId : "";
+            var definitions = this.findDefinitionsByDeploymentId(targetDeploymentId);
+            if (!definitions.length) {
+                this.$root.showError("No related process definition found for this deployment");
+                return;
+            }
+            var targetDefinition = definitions.slice().sort(function (left, right) {
+                return Number(right.version || 0) - Number(left.version || 0);
+            })[0];
+            this.$router.push({
+                path: "/designer",
+                query: {
+                    deploymentId: targetDeploymentId,
+                    processDefinitionId: targetDefinition.processDefinitionId || ""
+                }
+            });
+        },
         handlePreview: async function (row) {
             var targetDeploymentId = row && row.deploymentId ? row.deploymentId : "";
             var definitions = this.findDefinitionsByDeploymentId(targetDeploymentId);
             if (!definitions.length) {
-                this.$root.showError("当前部署未查询到关联流程定义，无法预览");
+                this.$root.showError("No related process definition found for this deployment");
                 return;
             }
             this.previewDeploymentId = targetDeploymentId;
@@ -481,7 +522,7 @@ window.DeployCenter = {
                 this.$nextTick(this.renderPreviewCanvas);
             } catch (error) {
                 this.previewDetail = null;
-                this.$root.showError(error.message || "加载流程图预览失败");
+                this.$root.showError(error.message || "Failed to load process preview");
             }
         },
         findDefinitionsByDeploymentId: function (deploymentId) {
@@ -701,20 +742,20 @@ window.DeployCenter = {
             }
             return detail.sequenceFlows.map(function (sequenceFlow) {
                 return (nodeNameMap[sequenceFlow.sourceRef] || sequenceFlow.sourceRef)
-                    + " → "
+                    + " -> "
                     + (nodeNameMap[sequenceFlow.targetRef] || sequenceFlow.targetRef);
             });
         },
         resolveNodeTypeLabel: function (elementType) {
             var mapping = {
-                StartEvent: "开始节点",
-                EndEvent: "结束节点",
-                UserTask: "用户任务",
-                ManualTask: "人工任务",
-                ServiceTask: "服务任务",
-                ExclusiveGateway: "排他网关",
-                ParallelGateway: "并行网关",
-                InclusiveGateway: "包容网关"
+                StartEvent: "Start Event",
+                EndEvent: "End Event",
+                UserTask: "User Task",
+                ManualTask: "Manual Task",
+                ServiceTask: "Service Task",
+                ExclusiveGateway: "Exclusive Gateway",
+                ParallelGateway: "Parallel Gateway",
+                InclusiveGateway: "Inclusive Gateway"
             };
             return mapping[elementType] || elementType;
         },

@@ -27,4 +27,8 @@ public class ApiResponse<T> {
     public static <T> ApiResponse<T> success(T data) {
         return success("处理成功", data);
     }
+
+    public static <T> ApiResponse<T> fail(Integer code, String message) {
+        return new ApiResponse<>(code, message, null);
+    }
 }
