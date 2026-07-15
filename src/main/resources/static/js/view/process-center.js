@@ -1092,7 +1092,11 @@ window.ProcessCenter = {
             this.selectedProcessId = rows[0].id;
         }
     },
-    mounted: function () {
+    mounted: async function () {
+        await Promise.all([
+            this.$root.loadDefinitions(),
+            this.$root.loadProcesses(this.$root.processPageNum, this.$root.processPageSize)
+        ]);
         this.resetForm();
         this.selectFirstProcessRow();
     },

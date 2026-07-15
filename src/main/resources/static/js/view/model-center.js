@@ -618,7 +618,8 @@ window.ModelCenter = {
             return mapping[elementType] || elementType;
         }
     },
-    mounted: function () {
+    mounted: async function () {
+        await this.$root.loadModels();
         this.selectFirstModel();
     },
     watch: {

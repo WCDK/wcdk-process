@@ -18,6 +18,10 @@ window.AppRouter = new VueRouter({
             component: window.ModelCenter
         },
         {
+            path: "/designer",
+            component: window.ProcessDesigner
+        },
+        {
             path: "/process",
             component: window.ProcessCenter
         },

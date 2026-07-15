@@ -25,7 +25,7 @@
 
     function unwrapResult(response, result) {
         if (!response.ok || (typeof result.code === "number" && result.code >= 400)) {
-            throw new Error((result && result.message) || "\u8bf7\u6c42\u5931\u8d25");
+            throw new Error((result && result.message) || "请求失败");
         }
         return result;
     }
@@ -37,8 +37,8 @@
             result = {
                 code: response.ok ? 200 : response.status,
                 message: response.ok
-                    ? "\u5904\u7406\u6210\u529f"
-                    : ("\u8bf7\u6c42\u5931\u8d25\uff0c\u534f\u8bae\u72b6\u6001\u7801\uff1a" + response.status),
+                    ? "处理成功"
+                    : ("请求失败，协议状态码：" + response.status),
                 data: null
             };
         }
@@ -78,14 +78,14 @@
 
     function resolveStatusLabel(status) {
         var mapping = {
-            DRAFT: "\u8349\u7a3f",
-            PROCESSING: "\u5ba1\u6279\u4e2d",
-            APPROVED: "\u5df2\u901a\u8fc7",
-            REJECTED: "\u5df2\u9a73\u56de",
-            CANCELLED: "\u5df2\u53d6\u6d88",
-            CANCELED: "\u5df2\u53d6\u6d88",
-            TERMINATED: "\u5df2\u7ec8\u6b62",
-            COMPLETED: "\u5df2\u5b8c\u6210"
+            DRAFT: "草稿",
+            PROCESSING: "审批中",
+            APPROVED: "已通过",
+            REJECTED: "已驳回",
+            CANCELLED: "已取消",
+            CANCELED: "已取消",
+            TERMINATED: "已终止",
+            COMPLETED: "已完成"
         };
         return mapping[status] || status || "-";
     }

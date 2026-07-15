@@ -713,7 +713,12 @@ window.DeployCenter = {
             this.selectedDeploymentId = list.length ? list[0].deploymentId : "";
         }
     },
-    mounted: function () {
+    mounted: async function () {
+        await Promise.all([
+            this.$root.loadDeployments(),
+            this.$root.loadDefinitions(),
+            this.$root.loadModels()
+        ]);
         this.selectFirstDeployment();
     },
     watch: {

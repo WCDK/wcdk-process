@@ -54,5 +54,8 @@ window.HomePage = {
                 return item.path !== "/home";
             });
         }
+    },
+    mounted: function () {
+        this.$root.reloadAll();
     }
 };

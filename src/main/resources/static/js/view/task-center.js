@@ -206,8 +206,9 @@ window.TaskCenter = {
             return null;
         }
     },
-    mounted: function () {
+    mounted: async function () {
         this.filters.assignee = this.$root.taskAssignee || "";
+        await this.$root.loadTasks(this.filters.assignee);
         this.selectFirstTask();
     },
     methods: {

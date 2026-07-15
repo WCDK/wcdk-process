@@ -10,6 +10,7 @@ new Vue({
                 { path: "/home", label: "首页", icon: "el-icon-house", description: "总览与快捷入口" },
                 { path: "/deploy", label: "部署中心", icon: "el-icon-upload2", description: "上传流程定义文件并部署流程" },
                 { path: "/model", label: "模型中心", icon: "el-icon-collection", description: "管理模型资产与流程模型源码" },
+                { path: "/designer", label: "流程设计", icon: "el-icon-edit-outline", description: "进入流程设计工作区" },
                 { path: "/process", label: "流程中心", icon: "el-icon-s-operation", description: "创建并发起流程申请" },
                 { path: "/task", label: "任务中心", icon: "el-icon-s-check", description: "查询并处理审批任务" }
             ],
@@ -42,9 +43,6 @@ new Vue({
             xmlVisible: false,
             currentXml: ""
         };
-    },
-    mounted: function () {
-        this.reloadAll();
     },
     methods: {
         isActiveMenu: function (path) {
