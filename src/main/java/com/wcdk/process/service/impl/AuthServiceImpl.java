@@ -47,15 +47,15 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public LoginResponse login(LoginRequest request) {
         if (request == null || !StringUtils.hasText(request.getUsername()) || !StringUtils.hasText(request.getPassword())) {
-            throw new UnauthorizedException("�û��������벻��Ϊ��");
+            throw new UnauthorizedException("用户名或密码不能为空");
         }
         SysUser sysUser = sysUserService.getByUsername(request.getUsername().trim());
         if (sysUser == null || !Integer.valueOf(1).equals(sysUser.getStatus())) {
-            throw new UnauthorizedException("�û������������");
+            throw new UnauthorizedException("用户名或密码错误");
         }
         String passwordHash = DigestUtils.md5DigestAsHex(request.getPassword().trim().getBytes(StandardCharsets.UTF_8));
         if (!passwordHash.equalsIgnoreCase(sysUser.getPasswordHash())) {
-            throw new UnauthorizedException("�û������������");
+            throw new UnauthorizedException("用户名或密码错误");
         }
         sysUserService.updateLastLoginTime(sysUser.getId());
         LocalDateTime expireTime = LocalDateTime.now().plusHours(TOKEN_EXPIRE_HOURS);
@@ -79,12 +79,12 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public AuthenticatedUser authenticate(String token) {
         if (!StringUtils.hasText(token)) {
-            throw new UnauthorizedException("���ȵ�¼���ٷ���");
+            throw new UnauthorizedException("请先登录后再访问");
         }
         TokenSession tokenSession = tokenSessionMap.get(token.trim());
         if (tokenSession == null || tokenSession.getExpireTime().isBefore(LocalDateTime.now())) {
             tokenSessionMap.remove(token);
-            throw new UnauthorizedException("��¼״̬�ѹ��ڣ������µ�¼");
+            throw new UnauthorizedException("登录状态已过期，请重新登录");
         }
         return tokenSession.getAuthenticatedUser();
     }

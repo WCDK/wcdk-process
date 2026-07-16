@@ -9,9 +9,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "wcdk.process.swagger")
 public class Knife4jProperties {
 
-    private String title = "��������ӿ��ĵ�";
+    private String title = "流程引擎接口文档";
 
-    private String description = "�������� ����ӿ��ĵ�";
+    private String description = "流程引擎 服务接口文档";
 
     private String version = "1.0";
 

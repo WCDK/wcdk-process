@@ -83,14 +83,14 @@ public class ProcessDesignerExportSupport {
 
     private void validateRequest(ProcessDesignerExportRequest request) {
         if (request == null) {
-            throw new IllegalArgumentException("����������Ϊ��");
+            throw new IllegalArgumentException("导出请求不能为空");
         }
         String format = normalizeFormat(request.getFormat());
         if (!"bpmn".equals(format) && !"bpmn20.xml".equals(format) && !"png".equals(format)) {
-            throw new IllegalArgumentException("������ʽ��֧�� BPMN��BPMN.XML �� PNG");
+            throw new IllegalArgumentException("导出格式仅支持 BPMN、BPMN.XML 或 PNG");
         }
         if (CollectionUtils.isEmpty(request.getNodes())) {
-            throw new IllegalArgumentException("�����ڻ�����������̽ڵ���ٵ���");
+            throw new IllegalArgumentException("请先在画布中添加流程节点后再导出");
         }
     }
 
@@ -457,7 +457,7 @@ public class ProcessDesignerExportSupport {
             ImageIO.write(image, "png", outputStream);
             return outputStream.toByteArray();
         } catch (Exception exception) {
-            throw new IllegalStateException("PNG ����ʧ��", exception);
+            throw new IllegalStateException("PNG 导出失败", exception);
         } finally {
             graphics.dispose();
         }

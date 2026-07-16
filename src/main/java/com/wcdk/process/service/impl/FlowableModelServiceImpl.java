@@ -181,7 +181,7 @@ public class FlowableModelServiceImpl implements FlowableModelService {
             JSONObject jsonObject = JSON.parseObject(metaInfoText);
             return jsonObject == null ? null : jsonObject.getString(PROCESS_BEAN_NAME);
         } catch (Exception exception) {
-            log.warn("解析流程模型元数据中�?processBean 失败", exception);
+            log.warn("解析流程模型元数据中processBean 失败", exception);
             return null;
         }
     }

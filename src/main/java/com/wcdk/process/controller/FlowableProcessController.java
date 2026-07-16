@@ -28,49 +28,49 @@ import java.util.List;
 @RestController
 @RequestMapping("/flowable/process")
 @RequiredArgsConstructor
-@Tag(name = "����ʵ������", description = "�ṩ�������������ʵ����ѯ�������ѯ���������ӿ�")
+@Tag(name = "流程实例管理", description = "提供流程启动、流程实例查询、任务查询和任务办理接口")
 public class FlowableProcessController {
 
     private final FlowableProcessService flowableProcessService;
 
     @PostMapping("/start")
-    @Operation(summary = "�������ʵ��", description = "�������̶����������µ�����ʵ��")
+    @Operation(summary = "启动流程实例", description = "根据流程定义参数启动新的流程实例")
     public ApiResponse<ProcessInstanceResponse> startProcess(@RequestBody StartProcessRequest request) {
-        return ApiResponse.success("��������ɹ�", flowableProcessService.startProcess(request));
+        return ApiResponse.success("流程启动成功", flowableProcessService.startProcess(request));
     }
 
     @GetMapping("/instance/{processInstanceId}")
-    @Operation(summary = "��ѯ����ʵ��", description = "��������ʵ����Ų�ѯ����ʵ������")
+    @Operation(summary = "查询流程实例", description = "根据流程实例编号查询流程实例详情")
     public ApiResponse<ProcessInstanceResponse> getProcessInstance(@PathVariable String processInstanceId) {
         return ApiResponse.success(flowableProcessService.getProcessInstance(processInstanceId));
     }
 
     @GetMapping("/task/list")
-    @Operation(summary = "��ѯ�����б�", description = "��������������ѯ����������б�")
+    @Operation(summary = "查询任务列表", description = "按办理人条件查询待办或任务列表")
     public ApiResponse<List<TaskResponse>> listTask(@RequestParam(required = false) String assignee) {
         return ApiResponse.success(flowableProcessService.listTask(assignee));
     }
 
     @PostMapping("/task/complete")
-    @Operation(summary = "��������", description = "�����������������ɵ�ǰ��������")
+    @Operation(summary = "办理任务", description = "根据任务办理请求完成当前流程任务")
     public ApiResponse<Void> completeTask(@RequestBody TaskCompleteRequest request) {
         flowableProcessService.completeTask(request);
-        return ApiResponse.success("���̴���ɹ�", null);
+        return ApiResponse.success("流程处理成功", null);
     }
 
     @DeleteMapping("/instance/{processInstanceId}")
-    @Operation(summary = "ɾ������ʵ��", description = "��������ʵ�����ɾ�������е�����ʵ����������ʱ����")
+    @Operation(summary = "删除流程实例", description = "根据流程实例编号删除运行中的流程实例及其运行时数据")
     public ApiResponse<Void> deleteProcessInstance(@PathVariable String processInstanceId,
                                                    @RequestParam(required = false) String deleteReason) {
         flowableProcessService.deleteProcessInstance(processInstanceId, deleteReason);
-        return ApiResponse.success("����ʵ��ɾ���ɹ�", null);
+        return ApiResponse.success("流程实例删除成功", null);
     }
 
     @DeleteMapping("/task/{taskId}")
-    @Operation(summary = "ɾ����������", description = "����������ɾ����ǰ������������")
+    @Operation(summary = "删除流程任务", description = "根据任务编号删除当前流程任务数据")
     public ApiResponse<Void> deleteTask(@PathVariable String taskId,
                                         @RequestParam(required = false) String deleteReason) {
         flowableProcessService.deleteTask(taskId, deleteReason);
-        return ApiResponse.success("��������ɾ���ɹ�", null);
+        return ApiResponse.success("流程任务删除成功", null);
     }
 }

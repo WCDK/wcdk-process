@@ -27,7 +27,7 @@ public final class AuthContextHolder {
     public static AuthenticatedUser requireUser() {
         AuthenticatedUser authenticatedUser = HOLDER.get();
         if (authenticatedUser == null) {
-            throw new UnauthorizedException("��ǰ��¼�ѹ��ڻ���δ��¼");
+            throw new UnauthorizedException("当前登录已过期或尚未登录");
         }
         return authenticatedUser;
     }
@@ -42,7 +42,7 @@ public final class AuthContextHolder {
                 || !(permissionCodes.contains(permissionCode)
                 || permissionCodes.contains("*")
                 || permissionCodes.contains("*:*:*"))) {
-            throw new ForbiddenException("��ǰ�û���Ȩ��ִ�иò���");
+            throw new ForbiddenException("当前用户无权限执行该操作");
         }
     }
 

@@ -126,13 +126,13 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
 
     private void validateRequest(SysRoleSaveRequest request) {
         if (request == null) {
-            throw new IllegalArgumentException("��ɫ��������Ϊ��");
+            throw new IllegalArgumentException("角色参数不能为空");
         }
         if (!StringUtils.hasText(request.getRoleCode())) {
-            throw new IllegalArgumentException("��ɫ���벻��Ϊ��");
+            throw new IllegalArgumentException("角色编码不能为空");
         }
         if (!StringUtils.hasText(request.getRoleName())) {
-            throw new IllegalArgumentException("��ɫ���Ʋ���Ϊ��");
+            throw new IllegalArgumentException("角色名称不能为空");
         }
     }
 
@@ -142,14 +142,14 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
                 .ne(id != null, SysRole::getId, id)
                 .count();
         if (count > 0) {
-            throw new IllegalArgumentException("��ɫ�����Ѵ���");
+            throw new IllegalArgumentException("角色编码已存在");
         }
     }
 
     private SysRole getRequiredRole(Long id) {
         SysRole role = getById(id);
         if (role == null) {
-            throw new IllegalArgumentException("δ�ҵ���Ӧ��ɫ");
+            throw new IllegalArgumentException("未找到对应角色");
         }
         return role;
     }

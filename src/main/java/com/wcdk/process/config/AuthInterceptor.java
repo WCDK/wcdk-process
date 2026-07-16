@@ -26,7 +26,7 @@ public class AuthInterceptor implements HandlerInterceptor {
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
         String token = resolveToken(request);
         if (token == null || token.isBlank()) {
-            throw new UnauthorizedException("���ȵ�¼���ٷ���");
+            throw new UnauthorizedException("请先登录后再访问");
         }
         AuthenticatedUser authenticatedUser = authService.authenticate(token);
         AuthContextHolder.set(authenticatedUser);

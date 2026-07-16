@@ -29,46 +29,46 @@ import java.util.List;
 @RestController
 @RequestMapping("/flowable/model")
 @RequiredArgsConstructor
-@Tag(name = "����ģ�͹���", description = "�ṩ����ģ�ʹ��������¡���ѯ�������ɾ���ӿ�")
+@Tag(name = "流程模型管理", description = "提供流程模型创建、更新、查询、部署和删除接口")
 public class FlowableModelController {
 
     private final FlowableModelService flowableModelService;
 
     @PostMapping
-    @Operation(summary = "��������ģ��", description = "����������������µ�����ģ��")
+    @Operation(summary = "创建流程模型", description = "根据请求参数创建新的流程模型")
     public ApiResponse<ModelResponse> createModel(@RequestBody ModelCreateRequest request) {
-        return ApiResponse.success("����ģ�ʹ����ɹ�", flowableModelService.createModel(request));
+        return ApiResponse.success("流程模型创建成功", flowableModelService.createModel(request));
     }
 
     @PutMapping("/{modelId}")
-    @Operation(summary = "��������ģ��", description = "����ģ�ͱ�Ÿ�������ģ�͵Ļ�����Ϣ�Ͷ�������")
+    @Operation(summary = "更新流程模型", description = "根据模型编号更新流程模型的基础信息和定义内容")
     public ApiResponse<ModelResponse> updateModel(@PathVariable String modelId, @RequestBody ModelUpdateRequest request) {
-        return ApiResponse.success("����ģ�͸��³ɹ�", flowableModelService.updateModel(modelId, request));
+        return ApiResponse.success("流程模型更新成功", flowableModelService.updateModel(modelId, request));
     }
 
     @GetMapping("/list")
-    @Operation(summary = "��ѯ����ģ���б�", description = "��ѯ��ǰϵͳ�е�����ģ���б�")
+    @Operation(summary = "查询流程模型列表", description = "查询当前系统中的流程模型列表")
     public ApiResponse<List<ModelResponse>> listModel() {
         return ApiResponse.success(flowableModelService.listModel());
     }
 
     @GetMapping("/{modelId}/xml")
-    @Operation(summary = "��ѯ����ģ��Դ��", description = "����ģ�ͱ�Ų�ѯ����ģ��Դ������")
+    @Operation(summary = "查询流程模型源码", description = "根据模型编号查询流程模型源码内容")
     public ApiResponse<String> getModelXml(@PathVariable String modelId) {
         return ApiResponse.success(flowableModelService.getModelXml(modelId));
     }
 
     @PostMapping("/{modelId}/deploy")
-    @Operation(summary = "��������ģ��", description = "����ģ�ͱ�Ž�����ģ�Ͳ���Ϊ��ִ�����̶��壬���� processBean")
+    @Operation(summary = "部署流程模型", description = "根据模型编号将流程模型部署为可执行流程定义，并绑定 processBean")
     public ApiResponse<DeploymentResponse> deployModel(@PathVariable String modelId,
                                                        @RequestParam String processBeanName) {
-        return ApiResponse.success("����ģ�Ͳ���ɹ�", flowableModelService.deployModel(modelId, processBeanName));
+        return ApiResponse.success("流程模型部署成功", flowableModelService.deployModel(modelId, processBeanName));
     }
 
     @DeleteMapping("/{modelId}")
-    @Operation(summary = "ɾ������ģ��", description = "����ģ�ͱ��ɾ������ģ�ͼ����������")
+    @Operation(summary = "删除流程模型", description = "根据模型编号删除流程模型及其关联数据")
     public ApiResponse<Void> deleteModel(@PathVariable String modelId) {
         flowableModelService.deleteModel(modelId);
-        return ApiResponse.success("����ģ��ɾ���ɹ�", null);
+        return ApiResponse.success("流程模型删除成功", null);
     }
 }

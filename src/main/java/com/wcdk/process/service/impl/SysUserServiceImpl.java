@@ -132,19 +132,19 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
     private void validateCreateRequest(SysUserSaveRequest request) {
         validateUpdateRequest(request);
         if (!StringUtils.hasText(request.getPassword())) {
-            throw new IllegalArgumentException("�����û�ʱ���벻��Ϊ��");
+            throw new IllegalArgumentException("新增用户时密码不能为空");
         }
     }
 
     private void validateUpdateRequest(SysUserSaveRequest request) {
         if (request == null) {
-            throw new IllegalArgumentException("�û���������Ϊ��");
+            throw new IllegalArgumentException("用户参数不能为空");
         }
         if (!StringUtils.hasText(request.getUsername())) {
-            throw new IllegalArgumentException("�û�������Ϊ��");
+            throw new IllegalArgumentException("用户名不能为空");
         }
         if (!StringUtils.hasText(request.getRealName())) {
-            throw new IllegalArgumentException("��������Ϊ��");
+            throw new IllegalArgumentException("姓名不能为空");
         }
     }
 
@@ -154,14 +154,14 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
                 .ne(id != null, SysUser::getId, id)
                 .count();
         if (count > 0) {
-            throw new IllegalArgumentException("�û����Ѵ���");
+            throw new IllegalArgumentException("用户名已存在");
         }
     }
 
     private SysUser getRequiredUser(Long id) {
         SysUser entity = getById(id);
         if (entity == null) {
-            throw new IllegalArgumentException("δ�ҵ���Ӧ�û�");
+            throw new IllegalArgumentException("未找到对应用户");
         }
         return entity;
     }

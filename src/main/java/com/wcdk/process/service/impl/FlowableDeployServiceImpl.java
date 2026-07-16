@@ -77,8 +77,8 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
     private static final int DEPLOYMENT_NAME_MAX_LENGTH = 50;
 
     private static final Pattern DEPLOYMENT_NAME_PATTERN =
-//            Pattern.compile("^(?=.*[A-Za-z0-9һ-��])[A-Za-z0-9һ-��._\\-()����]{4,50}$");
-    Pattern.compile("^(?=.*[A-Za-z0-9\\u4e00-\\u9fa5])[A-Za-z0-9\\u4e00-\\u9fa5._\\-()����]{4,50}$");
+//            Pattern.compile("^(?=.*[A-Za-z0-9一-龥])[A-Za-z0-9一-龥._\\-()（）]{4,50}$");
+    Pattern.compile("^(?=.*[A-Za-z0-9\\u4e00-\\u9fa5])[A-Za-z0-9\\u4e00-\\u9fa5._\\-()（）]{4,50}$");
 
 
     private final RepositoryService repositoryService;
@@ -88,11 +88,11 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
     @Override
     public DeploymentResponse deployProcess(String deploymentName, String category, String processBeanName, MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("�����ļ�����Ϊ��");
+            throw new IllegalArgumentException("部署文件不能为空");
         }
         String validDeploymentName = validateDeploymentName(deploymentName);
         String validProcessBeanName = validateProcessBeanName(processBeanName);
-        log.info("��ʼ���������ļ����������ƣ�{}���ļ�����{}", validDeploymentName, file.getOriginalFilename());
+        log.info("开始部署流程文件，流程名称：{}，文件名：{}", validDeploymentName, file.getOriginalFilename());
         try {
             byte[] fileBytes = file.getBytes();
             BpmnModel bpmnModel = parseBpmnModel(fileBytes);
@@ -104,15 +104,15 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
                     .category(category)
                     .addBytes(resourceName, deployBytes)
                     .deploy();
-            log.info("���̲���ɹ�������ID��{}", deployment.getId());
+            log.info("流程部署成功，部署ID：{}", deployment.getId());
             bindDeploymentProcessDefinitions(deployment.getId(), validProcessBeanName);
             return buildDeploymentResponse(deployment);
         } catch (IOException ex) {
-            log.error("��ȡ���̲����ļ�ʧ��", ex);
-            throw new IllegalArgumentException("��ȡ���̲����ļ�ʧ��");
+            log.error("读取流程部署文件失败", ex);
+            throw new IllegalArgumentException("读取流程部署文件失败");
         } catch (XMLStreamException ex) {
-            log.error("���� BPMN �ļ�ʧ��", ex);
-            throw new IllegalArgumentException("���� BPMN �ļ�ʧ��");
+            log.error("解析 BPMN 文件失败", ex);
+            throw new IllegalArgumentException("解析 BPMN 文件失败");
         }
     }
 
@@ -149,13 +149,13 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
     @Override
     public ProcessDefinitionDetailResponse getProcessDefinitionDetail(String processDefinitionId) {
         if (!StringUtils.hasText(processDefinitionId)) {
-            throw new IllegalArgumentException("���̶���ID����Ϊ��");
+            throw new IllegalArgumentException("流程定义ID不能为空");
         }
         ProcessDefinition processDefinition = repositoryService.createProcessDefinitionQuery()
                 .processDefinitionId(processDefinitionId)
                 .singleResult();
         if (processDefinition == null) {
-            throw new IllegalArgumentException("δ��ѯ����Ӧ���̶��壬���̶���ID��" + processDefinitionId);
+            throw new IllegalArgumentException("未查询到对应流程定义，流程定义ID：" + processDefinitionId);
         }
         Deployment deployment = repositoryService.createDeploymentQuery()
                 .deploymentId(processDefinition.getDeploymentId())
@@ -202,36 +202,36 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
     @Override
     public void deleteDeployment(String deploymentId, Boolean cascade) {
         if (!StringUtils.hasText(deploymentId)) {
-            throw new IllegalArgumentException("����ID����Ϊ��");
+            throw new IllegalArgumentException("部署ID不能为空");
         }
         Deployment deployment = repositoryService.createDeploymentQuery()
                 .deploymentId(deploymentId)
                 .singleResult();
         if (deployment == null) {
-            throw new IllegalArgumentException("δ��ѯ����Ӧ���𣬲���ID��" + deploymentId);
+            throw new IllegalArgumentException("未查询到对应部署，部署ID：" + deploymentId);
         }
-        log.info("��ʼɾ�����̲��𣬲���ID��{}������ɾ����{}", deploymentId, cascade);
+        log.info("开始删除流程部署，部署ID：{}，级联删除：{}", deploymentId, cascade);
         repositoryService.deleteDeployment(deploymentId, Boolean.TRUE.equals(cascade));
     }
 
     private String validateDeploymentName(String deploymentName) {
         if (!StringUtils.hasText(deploymentName)) {
-            throw new IllegalArgumentException("�������Ʋ���Ϊ��");
+            throw new IllegalArgumentException("流程名称不能为空");
         }
         String trimmedDeploymentName = deploymentName.trim();
         if (trimmedDeploymentName.length() < DEPLOYMENT_NAME_MIN_LENGTH
                 || trimmedDeploymentName.length() > DEPLOYMENT_NAME_MAX_LENGTH) {
-            throw new IllegalArgumentException("�������Ƴ��ȱ���Ϊ4��50���ַ�");
+            throw new IllegalArgumentException("流程名称长度必须为4到50个字符");
         }
         if (!DEPLOYMENT_NAME_PATTERN.matcher(trimmedDeploymentName).matches()) {
-            throw new IllegalArgumentException("�������ƽ�֧�����ġ���ĸ�����֡��㡢���š��»��ߺ���Ӣ������");
+            throw new IllegalArgumentException("流程名称仅支持中文、字母、数字、点、减号、下划线和中英文括号");
         }
         return trimmedDeploymentName;
     }
 
     private String validateProcessBeanName(String processBeanName) {
         if (!StringUtils.hasText(processBeanName)) {
-            throw new IllegalArgumentException("��������ʱ����ָ�� processBean");
+            throw new IllegalArgumentException("部署流程时必须指定 processBean");
         }
         return processBeanName.trim();
     }
@@ -251,30 +251,30 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
 
     private BpmnModel parseBpmnModel(byte[] fileBytes) throws XMLStreamException {
         if (fileBytes == null || fileBytes.length == 0) {
-            throw new IllegalArgumentException("�����ļ����ݲ���Ϊ��");
+            throw new IllegalArgumentException("流程文件内容不能为空");
         }
         XMLInputFactory inputFactory = XMLInputFactory.newFactory();
         try (ByteArrayInputStream inputStream = new ByteArrayInputStream(fileBytes)) {
             XMLStreamReader streamReader = inputFactory.createXMLStreamReader(inputStream, StandardCharsets.UTF_8.name());
             return new BpmnXMLConverter().convertToBpmnModel(streamReader);
         } catch (IOException ex) {
-            throw new IllegalArgumentException("��ȡ BPMN �ļ�ʧ��", ex);
+            throw new IllegalArgumentException("读取 BPMN 文件失败", ex);
         }
     }
 
     private void validateBpmnModel(BpmnModel bpmnModel) {
         if (bpmnModel == null) {
-            throw new IllegalArgumentException("�����ļ�������Ϊ��");
+            throw new IllegalArgumentException("流程文件解析后为空");
         }
         Process mainProcess = bpmnModel.getMainProcess();
         if (mainProcess == null || !StringUtils.hasText(mainProcess.getId())) {
-            throw new IllegalArgumentException("�����ļ�ȱ�������̶���");
+            throw new IllegalArgumentException("流程文件缺少主流程定义");
         }
         boolean hasFlowNode = mainProcess.getFlowElements()
                 .stream()
                 .anyMatch(FlowNode.class::isInstance);
         if (!hasFlowNode) {
-            throw new IllegalArgumentException("�����ļ���δ�ҵ��ɻ��Ƶ������Ľڵ�");
+            throw new IllegalArgumentException("流程文件中未找到可绘制到画布的节点");
         }
     }
 
@@ -375,8 +375,8 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
              InputStreamReader reader = new InputStreamReader(inputStream, StandardCharsets.UTF_8)) {
             return FileCopyUtils.copyToString(reader);
         } catch (IOException ex) {
-            log.error("读取流程定义 XML 失败，流程定义ID：{}", processDefinition.getId(), ex);
-            throw new IllegalArgumentException("读取流程定义 XML 失败");
+            log.error("璇诲彇娴佺▼瀹氫箟 XML 澶辫触锛屾祦绋嬪畾涔塈D锛歿}", processDefinition.getId(), ex);
+            throw new IllegalArgumentException("璇诲彇娴佺▼瀹氫箟 XML 澶辫触");
         }
     }
 
@@ -621,7 +621,7 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
         List<ProcessActionButtonResponse> results = new ArrayList<>();
         results.add(ProcessActionButtonResponse.builder()
                 .actionKey("createDraft")
-                .label(hasUserTask ? "����ݸ�" : "������������")
+                .label(hasUserTask ? "保存草稿" : "创建流程申请")
                 .buttonType("primary")
                 .submit(Boolean.FALSE)
                 .sortOrder(0)
@@ -629,7 +629,7 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
         if (hasStartEvent) {
             results.add(ProcessActionButtonResponse.builder()
                     .actionKey("createAndSubmit")
-                    .label(hasUserTask ? "����������" : "��������")
+                    .label(hasUserTask ? "创建并发起" : "立即发起")
                     .buttonType("success")
                     .submit(Boolean.TRUE)
                     .sortOrder(1)
@@ -637,7 +637,7 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
         }
         results.add(ProcessActionButtonResponse.builder()
                 .actionKey("reset")
-                .label("����")
+                .label("重置")
                 .buttonType("default")
                 .submit(Boolean.FALSE)
                 .sortOrder(2)
@@ -651,13 +651,13 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
 
     private String resolveDefaultButtonLabel(String actionKey) {
         if ("createDraft".equals(actionKey)) {
-            return "����ݸ�";
+            return "保存草稿";
         }
         if ("createAndSubmit".equals(actionKey)) {
-            return "����������";
+            return "创建并发起";
         }
         if ("reset".equals(actionKey)) {
-            return "����";
+            return "重置";
         }
         return actionKey;
     }
@@ -860,9 +860,9 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
 
     private String buildDefaultPlaceholder(String label, String componentType) {
         if ("select".equals(componentType) || "radio".equals(componentType) || "date".equals(componentType)) {
-            return "��ѡ��" + label;
+            return "请选择" + label;
         }
-        return "������" + label;
+        return "请输入" + label;
     }
 
     private String firstNonBlank(String... values) {

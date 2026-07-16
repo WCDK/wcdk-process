@@ -24,7 +24,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Flowable ����ʵ����������ʵ�֡�
+ * Flowable 流程实例与任务处理实现。
  *
  * @author WCDK
  * @date 2026/7/13
@@ -70,7 +70,7 @@ public class FlowableProcessServiceImpl implements FlowableProcessService {
     @Override
     public ProcessInstanceResponse getProcessInstance(String processInstanceId) {
         if (!StringUtils.hasText(processInstanceId)) {
-            throw new IllegalArgumentException("����ʵ��ID����Ϊ��");
+            throw new IllegalArgumentException("流程实例ID不能为空");
         }
         ProcessInstance processInstance = runtimeService.createProcessInstanceQuery()
                 .processInstanceId(processInstanceId)
@@ -83,7 +83,7 @@ public class FlowableProcessServiceImpl implements FlowableProcessService {
                 .processInstanceId(processInstanceId)
                 .singleResult();
         if (historicProcessInstance == null) {
-            throw new IllegalArgumentException("δ��ѯ����Ӧ����ʵ��������ʵ��ID��" + processInstanceId);
+            throw new IllegalArgumentException("未查询到对应流程实例，流程实例ID：" + processInstanceId);
         }
         return ProcessInstanceResponse.builder()
                 .processInstanceId(historicProcessInstance.getId())
@@ -113,13 +113,13 @@ public class FlowableProcessServiceImpl implements FlowableProcessService {
     @Transactional(rollbackFor = Exception.class)
     public void completeTask(TaskCompleteRequest request) {
         if (request == null || !StringUtils.hasText(request.getTaskId())) {
-            throw new IllegalArgumentException("����ID����Ϊ��");
+            throw new IllegalArgumentException("任务ID不能为空");
         }
         Task task = taskService.createTaskQuery()
                 .taskId(request.getTaskId())
                 .singleResult();
         if (task == null) {
-            throw new IllegalArgumentException("δ��ѯ����Ӧ��������ID��" + request.getTaskId());
+            throw new IllegalArgumentException("未查询到对应任务，任务ID：" + request.getTaskId());
         }
         Map<String, Object> variables = request.getVariables() == null ? Map.of() : request.getVariables();
         taskService.complete(request.getTaskId(), variables);
@@ -129,7 +129,7 @@ public class FlowableProcessServiceImpl implements FlowableProcessService {
     @Transactional(rollbackFor = Exception.class)
     public void deleteProcessInstance(String processInstanceId, String deleteReason) {
         if (!StringUtils.hasText(processInstanceId)) {
-            throw new IllegalArgumentException("����ʵ��ID����Ϊ��");
+            throw new IllegalArgumentException("流程实例ID不能为空");
         }
         ProcessInstance processInstance = runtimeService.createProcessInstanceQuery()
                 .processInstanceId(processInstanceId)
@@ -139,9 +139,9 @@ public class FlowableProcessServiceImpl implements FlowableProcessService {
                     .processInstanceId(processInstanceId)
                     .singleResult();
             if (historicProcessInstance == null) {
-                throw new IllegalArgumentException("δ��ѯ����Ӧ����ʵ��������ʵ��ID��" + processInstanceId);
+                throw new IllegalArgumentException("未查询到对应流程实例，流程实例ID：" + processInstanceId);
             }
-            throw new IllegalArgumentException("����ʵ���ѽ����������ظ�ɾ��");
+            throw new IllegalArgumentException("流程实例已结束，不能重复删除");
         }
         runtimeService.deleteProcessInstance(processInstanceId, resolveDeleteReason(deleteReason));
     }
@@ -150,20 +150,20 @@ public class FlowableProcessServiceImpl implements FlowableProcessService {
     @Transactional(rollbackFor = Exception.class)
     public void deleteTask(String taskId, String deleteReason) {
         if (!StringUtils.hasText(taskId)) {
-            throw new IllegalArgumentException("����ID����Ϊ��");
+            throw new IllegalArgumentException("任务ID不能为空");
         }
         Task task = taskService.createTaskQuery()
                 .taskId(taskId)
                 .singleResult();
         if (task == null) {
-            throw new IllegalArgumentException("δ��ѯ����Ӧ��������ID��" + taskId);
+            throw new IllegalArgumentException("未查询到对应任务，任务ID：" + taskId);
         }
         if (StringUtils.hasText(task.getProcessInstanceId())) {
             ProcessInstance processInstance = runtimeService.createProcessInstanceQuery()
                     .processInstanceId(task.getProcessInstanceId())
                     .singleResult();
             if (processInstance != null) {
-                throw new IllegalArgumentException("�����е���������֧��ֱ��ɾ����������������ɾ������ʵ��");
+                throw new IllegalArgumentException("运行中的流程任务不支持直接删除，请先完成任务或删除流程实例");
             }
         }
         taskService.deleteTask(taskId, resolveDeleteReason(deleteReason));
@@ -171,10 +171,10 @@ public class FlowableProcessServiceImpl implements FlowableProcessService {
 
     private void validateStartProcessRequest(StartProcessRequest request) {
         if (request == null) {
-            throw new IllegalArgumentException("�������������Ϊ��");
+            throw new IllegalArgumentException("启动流程请求不能为空");
         }
         if (!StringUtils.hasText(resolveProcessDefinitionKey(request.getProcessDefinitionKey()))) {
-            throw new IllegalArgumentException("���̶����ʶ����Ϊ��");
+            throw new IllegalArgumentException("流程定义标识不能为空");
         }
     }
 
@@ -183,7 +183,7 @@ public class FlowableProcessServiceImpl implements FlowableProcessService {
     }
 
     private String resolveDeleteReason(String deleteReason) {
-        return StringUtils.hasText(deleteReason) ? deleteReason.trim() : "ҳ���ֶ�ɾ��";
+        return StringUtils.hasText(deleteReason) ? deleteReason.trim() : "页面手动删除";
     }
 
     private ProcessInstanceResponse buildProcessInstanceResponse(ProcessInstance processInstance, String processBeanName) {

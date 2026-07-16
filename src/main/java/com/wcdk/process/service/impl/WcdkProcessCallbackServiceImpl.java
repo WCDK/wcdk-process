@@ -57,7 +57,7 @@ public class WcdkProcessCallbackServiceImpl implements WcdkProcessCallbackServic
         if (wcdkProcessClientRegistryService.hasProcessBinding(event.getClientId(), event.getProcessDefinitionId())) {
             return;
         }
-        throw new IllegalArgumentException("��ǰ�ͻ���δ�󶨸����̶���");
+        throw new IllegalArgumentException("当前客户端未绑定该流程定义");
     }
 
     private String resolveProcessBeanName(WcdkProcessConnectionEvent request) {
@@ -70,11 +70,11 @@ public class WcdkProcessCallbackServiceImpl implements WcdkProcessCallbackServic
         }
         String processInstanceId = resolveProcessInstanceId(request);
         if (!StringUtils.hasText(processInstanceId)) {
-            throw new IllegalArgumentException("���̻ص�ʱ�����ṩprocessBeanName��processInstanceId");
+            throw new IllegalArgumentException("流程回调时必须提供processBeanName或processInstanceId");
         }
         Object variableValue = runtimeService.getVariable(processInstanceId, PROCESS_BEAN_NAME);
         if (variableValue == null || !StringUtils.hasText(String.valueOf(variableValue))) {
-            throw new IllegalArgumentException("����ʵ��δ�������̴�����");
+            throw new IllegalArgumentException("流程实例未设置流程处理器");
         }
         return String.valueOf(variableValue);
     }

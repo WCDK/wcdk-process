@@ -19,12 +19,12 @@ import java.util.Map;
 public class TaskCompleteRequest {
 
     /**
-     * ����ID
+     * 任务ID
      */
     private String taskId;
 
     /**
-     * �������
+     * 办理变量
      */
     private Map<String, Object> variables;
 }

@@ -19,27 +19,27 @@ import java.util.Map;
 public class StartProcessRequest {
 
     /**
-     * ���̶����ʶ��Ĭ��ʹ��ʾ������ leave-process
+     * 流程定义标识，默认使用示例流程 leave-process
      */
     private String processDefinitionKey;
 
     /**
-     * ҵ������
+     * 业务主键
      */
     private String businessKey;
 
     /**
-     * ���̷�����
+     * 流程发起人
      */
     private String starter;
 
     /**
-     * ���̻ص�bean����
+     * 流程回调bean名称
      */
     private String processBeanName;
 
     /**
-     * ���̱���
+     * 流程变量
      */
     private Map<String, Object> variables;
 }

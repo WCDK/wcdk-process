@@ -17,26 +17,26 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<ApiResponse<Void>> handleUnauthorizedException(UnauthorizedException ex) {
-        log.warn("��¼У��ʧ��: {}", ex.getMessage());
+        log.warn("登录校验失败: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.fail(401, ex.getMessage()));
     }
 
     @ExceptionHandler(ForbiddenException.class)
     public ResponseEntity<ApiResponse<Void>> handleForbiddenException(ForbiddenException ex) {
-        log.warn("Ȩ��У��ʧ��: {}", ex.getMessage());
+        log.warn("权限校验失败: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.fail(403, ex.getMessage()));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Void>> handleIllegalArgumentException(IllegalArgumentException ex) {
-        log.warn("ҵ�����У��ʧ��: {}", ex.getMessage());
+        log.warn("业务参数校验失败: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.fail(400, ex.getMessage()));
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleException(Exception ex) {
-        log.error("ϵͳ�����쳣", ex);
+        log.error("系统处理异常", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.fail(500, "ϵͳ�����쳣�����Ժ�����"));
+                .body(ApiResponse.fail(500, "系统处理异常，请稍后重试"));
     }
 }

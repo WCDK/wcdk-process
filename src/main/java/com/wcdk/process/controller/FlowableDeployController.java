@@ -27,43 +27,43 @@ import java.util.List;
 @RestController
 @RequestMapping("/flowable/deploy")
 @RequiredArgsConstructor
-@Tag(name = "���̲������", description = "�ṩ���̶��岿�𡢲����б��ѯ�����̶����ѯ�Ͳ���ɾ���ӿ�")
+@Tag(name = "流程部署管理", description = "提供流程定义部署、部署列表查询、流程定义查询和部署删除接口")
 public class FlowableDeployController {
 
     private final FlowableDeployService flowableDeployService;
 
     @PostMapping("/process")
-    @Operation(summary = "�������̶����ļ�", description = "�ϴ����̶����ļ����������̲���ͬʱ�� processBean �󶨿ͻ���")
+    @Operation(summary = "部署流程定义文件", description = "上传流程定义文件并创建流程部署，同时按 processBean 绑定客户端")
     public ApiResponse<DeploymentResponse> deployProcess(@RequestParam String deploymentName,
                                                          @RequestParam(required = false) String category,
                                                          @RequestParam String processBeanName,
                                                          @RequestParam("file") MultipartFile file) {
-        return ApiResponse.success("���̲���ɹ�", flowableDeployService.deployProcess(deploymentName, category, processBeanName, file));
+        return ApiResponse.success("流程部署成功", flowableDeployService.deployProcess(deploymentName, category, processBeanName, file));
     }
 
     @GetMapping("/list")
-    @Operation(summary = "��ѯ�����б�", description = "��ѯ��ǰϵͳ�е����̲����¼�б�")
+    @Operation(summary = "查询部署列表", description = "查询当前系统中的流程部署记录列表")
     public ApiResponse<List<DeploymentResponse>> listDeployment() {
         return ApiResponse.success(flowableDeployService.listDeployment());
     }
 
     @GetMapping("/definition/list")
-    @Operation(summary = "��ѯ���̶����б�", description = "��ѯ�Ѳ���ɹ������̶����б�")
+    @Operation(summary = "查询流程定义列表", description = "查询已部署成功的流程定义列表")
     public ApiResponse<List<ProcessDefinitionResponse>> listProcessDefinition() {
         return ApiResponse.success(flowableDeployService.listProcessDefinition());
     }
 
     @GetMapping("/definition/{processDefinitionId}")
-    @Operation(summary = "��ѯ���̶�������", description = "�������̶����Ų�ѯ���̶�������������ͼ�ṹ")
+    @Operation(summary = "查询流程定义详情", description = "根据流程定义编号查询流程定义详情与流程图结构")
     public ApiResponse<ProcessDefinitionDetailResponse> getProcessDefinitionDetail(@PathVariable String processDefinitionId) {
         return ApiResponse.success(flowableDeployService.getProcessDefinitionDetail(processDefinitionId));
     }
 
     @DeleteMapping
-    @Operation(summary = "ɾ�����̲���", description = "���ݲ�����ɾ�����̲��𣬿�ѡ�Ƿ���ɾ����������ʵ��")
+    @Operation(summary = "删除流程部署", description = "根据部署编号删除流程部署，可选是否级联删除关联流程实例")
     public ApiResponse<Void> deleteDeployment(@RequestParam String deploymentId,
                                               @RequestParam(defaultValue = "true") Boolean cascade) {
         flowableDeployService.deleteDeployment(deploymentId, cascade);
-        return ApiResponse.success("ɾ������ɹ�", null);
+        return ApiResponse.success("删除部署成功", null);
     }
 }

@@ -108,7 +108,7 @@ public class SysPermissionServiceImpl extends ServiceImpl<SysPermissionMapper, S
         getRequiredPermission(id);
         long childrenCount = lambdaQuery().eq(SysPermission::getParentId, id).count();
         if (childrenCount > 0) {
-            throw new IllegalArgumentException("��Ȩ���´�����Ȩ�ޣ��޷�ɾ��");
+            throw new IllegalArgumentException("该权限下存在子权限，无法删除");
         }
         sysRolePermissionMapper.delete(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<SysRolePermission>()
                 .eq(SysRolePermission::getPermissionId, id));
@@ -163,13 +163,13 @@ public class SysPermissionServiceImpl extends ServiceImpl<SysPermissionMapper, S
 
     private void validateRequest(SysPermissionSaveRequest request) {
         if (request == null) {
-            throw new IllegalArgumentException("Ȩ�޲�������Ϊ��");
+            throw new IllegalArgumentException("权限参数不能为空");
         }
         if (!StringUtils.hasText(request.getPermissionCode())) {
-            throw new IllegalArgumentException("Ȩ�ޱ��벻��Ϊ��");
+            throw new IllegalArgumentException("权限编码不能为空");
         }
         if (!StringUtils.hasText(request.getPermissionName())) {
-            throw new IllegalArgumentException("Ȩ�����Ʋ���Ϊ��");
+            throw new IllegalArgumentException("权限名称不能为空");
         }
     }
 
@@ -179,14 +179,14 @@ public class SysPermissionServiceImpl extends ServiceImpl<SysPermissionMapper, S
                 .ne(id != null, SysPermission::getId, id)
                 .count();
         if (count > 0) {
-            throw new IllegalArgumentException("Ȩ�ޱ����Ѵ���");
+            throw new IllegalArgumentException("权限编码已存在");
         }
     }
 
     private SysPermission getRequiredPermission(Long id) {
         SysPermission permission = getById(id);
         if (permission == null) {
-            throw new IllegalArgumentException("δ�ҵ���ӦȨ��");
+            throw new IllegalArgumentException("未找到对应权限");
         }
         return permission;
     }

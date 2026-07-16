@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
  **/
 @RestController
 @RequestMapping("/sys/user")
-@Tag(name = "�û�����", description = "�ṩ�û���ҳ�����������º�ɾ������")
+@Tag(name = "用户管理", description = "提供用户分页、创建、更新和删除能力")
 public class SysUserController {
 
     private final SysUserService sysUserService;
@@ -34,7 +34,7 @@ public class SysUserController {
     }
 
     @GetMapping("/list")
-    @Operation(summary = "��ҳ��ѯ�û�", description = "���û��������������ź�״̬��ҳ��ѯ�û���Ϣ")
+    @Operation(summary = "分页查询用户", description = "按用户名、姓名、部门和状态分页查询用户信息")
     public ApiResponse<PageResponse<SysUserResponse>> list(@RequestParam(defaultValue = "1") Long pageNum,
                                                            @RequestParam(defaultValue = "10") Long pageSize,
                                                            @RequestParam(required = false) String username,
@@ -46,24 +46,24 @@ public class SysUserController {
     }
 
     @PostMapping
-    @Operation(summary = "�����û�", description = "����һ���û����󶨽�ɫ")
+    @Operation(summary = "新增用户", description = "新增一个用户并绑定角色")
     public ApiResponse<SysUserResponse> create(@RequestBody SysUserSaveRequest request) {
         AuthContextHolder.requirePermission("sys:user:add");
-        return ApiResponse.success("�����û��ɹ�", sysUserService.createUser(request));
+        return ApiResponse.success("新增用户成功", sysUserService.createUser(request));
     }
 
     @PutMapping("/{id}")
-    @Operation(summary = "�޸��û�", description = "�����û�ID�޸��û���Ϣ�ͽ�ɫ")
+    @Operation(summary = "修改用户", description = "根据用户ID修改用户信息和角色")
     public ApiResponse<SysUserResponse> update(@PathVariable Long id, @RequestBody SysUserSaveRequest request) {
         AuthContextHolder.requirePermission("sys:user:edit");
-        return ApiResponse.success("�޸��û��ɹ�", sysUserService.updateUser(id, request));
+        return ApiResponse.success("修改用户成功", sysUserService.updateUser(id, request));
     }
 
     @DeleteMapping("/{id}")
-    @Operation(summary = "ɾ���û�", description = "�����û�IDɾ���û���Ϣ")
+    @Operation(summary = "删除用户", description = "根据用户ID删除用户信息")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         AuthContextHolder.requirePermission("sys:user:delete");
         sysUserService.deleteUser(id);
-        return ApiResponse.success("ɾ���û��ɹ�", null);
+        return ApiResponse.success("删除用户成功", null);
     }
 }

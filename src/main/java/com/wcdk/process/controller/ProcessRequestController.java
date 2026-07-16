@@ -27,33 +27,33 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/process/request")
 @RequiredArgsConstructor
-@Tag(name = "��������",description = "�������ύ����ѯ��������ɾ����������")
+@Tag(name = "流程申请",description = "创建、提交、查询、审批和删除流程申请")
 public class ProcessRequestController {
 
     private final ProcessRequestService processRequestService;
 
     @PostMapping
     @Operation(
-            summary = "������������",
-            description = "���ݶ�̬������ݴ�����������"
+            summary = "创建流程申请",
+            description = "根据动态表单数据创建流程申请"
     )
     public ApiResponse<ProcessRequestResponse> createProcessRequest(@RequestBody ProcessRequestCreateRequest request) {
-        return ApiResponse.success("�������봴���ɹ�", processRequestService.createProcessRequest(request));
+        return ApiResponse.success("流程申请创建成功", processRequestService.createProcessRequest(request));
     }
 
     @PostMapping("/{id}/submit")
     @Operation(
-            summary = "�ύ��������",
-            description = "���� ID �ύ���̲ݸ�"
+            summary = "提交流程申请",
+            description = "根据 ID 提交流程草稿"
     )
     public ApiResponse<ProcessRequestResponse> submitProcessRequest(@PathVariable Long id) {
-        return ApiResponse.success("���������ύ�ɹ�", processRequestService.submitProcessRequest(id));
+        return ApiResponse.success("流程申请提交成功", processRequestService.submitProcessRequest(id));
     }
 
     @GetMapping("/{id}")
     @Operation(
-            summary = "��ѯ������������",
-            description = "���� ID ��ѯ������������"
+            summary = "查询流程申请详情",
+            description = "根据 ID 查询流程申请详情"
     )
     public ApiResponse<ProcessRequestResponse> getProcessRequest(@PathVariable Long id) {
         return ApiResponse.success(processRequestService.getProcessRequest(id));
@@ -61,8 +61,8 @@ public class ProcessRequestController {
 
     @GetMapping("/{id}/diagram")
     @Operation(
-            summary = "��ѯ������������ͼ����",
-            description = "������������ ID ��ѯ��Ӧ����ͼ�ṹ����ǰ����ڵ�"
+            summary = "查询流程申请流程图详情",
+            description = "根据流程申请 ID 查询对应流程图结构及当前步骤节点"
     )
     public ApiResponse<ProcessDefinitionDetailResponse> getProcessRequestDiagramDetail(@PathVariable Long id) {
         return ApiResponse.success(processRequestService.getProcessRequestDiagramDetail(id));
@@ -70,8 +70,8 @@ public class ProcessRequestController {
 
     @GetMapping("/list")
     @Operation(
-            summary = "��ѯ���������б�",
-            description = "������ʱ�䵹���ҳ��ѯ���������б�"
+            summary = "查询流程申请列表",
+            description = "按创建时间倒序分页查询流程申请列表"
     )
     public ApiResponse<PageResponse<ProcessRequestResponse>> listProcessRequest(
             @RequestParam(defaultValue = "1") Long pageNum,
@@ -96,22 +96,22 @@ public class ProcessRequestController {
 
     @PostMapping("/approve")
     @Operation(
-            summary = "������������",
-            description = "�������������Ӧ����������"
+            summary = "审批流程申请",
+            description = "处理流程申请对应的审批任务"
     )
     public ApiResponse<Void> approveProcessRequest(@RequestBody ProcessRequestApproveRequest request) {
         processRequestService.approveProcessRequest(request);
-        return ApiResponse.success("����������������ɹ�", null);
+        return ApiResponse.success("流程申请审批处理成功", null);
     }
 
     @DeleteMapping("/{id}")
     @Operation(
-            summary = "ɾ����������",
-            description = "ɾ���������뼰����ص�����ʱ����"
+            summary = "删除流程申请",
+            description = "删除流程申请及其相关的运行时数据"
     )
     public ApiResponse<Void> deleteProcessRequest(@PathVariable Long id,
                                                   @RequestParam(required = false) String deleteReason) {
         processRequestService.deleteProcessRequest(id, deleteReason);
-        return ApiResponse.success("��������ɾ���ɹ�", null);
+        return ApiResponse.success("流程申请删除成功", null);
     }
 }

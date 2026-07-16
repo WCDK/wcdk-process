@@ -39,7 +39,7 @@ public class WcdkProcessClientCallbackServiceImpl implements WcdkProcessClientCa
         }
         List<WcdkProcessClientDefinition> clientDefinitions = wcdkProcessClientRegistryService.listByProcessDefinitionId(event.getProcessDefinitionId());
         if (clientDefinitions.isEmpty()) {
-            log.info("δ�ҵ��ɽ������̻ص��Ŀͻ��ˣ�processBeanName={}", event.getProcessBeanName());
+            log.info("未找到可接收流程回调的客户端，processBeanName={}", event.getProcessBeanName());
             return;
         }
         for (WcdkProcessClientDefinition clientDefinition : clientDefinitions) {
@@ -52,7 +52,7 @@ public class WcdkProcessClientCallbackServiceImpl implements WcdkProcessClientCa
                         .retrieve()
                         .toBodilessEntity();
             } catch (Exception exception) {
-                log.warn("���̻ص��ͻ���ʧ�ܣ�clientId={}, callbackUrl={}", clientDefinition.getClientId(), clientDefinition.getCallbackUrl(), exception);
+                log.warn("流程回调客户端失败，clientId={}, callbackUrl={}", clientDefinition.getClientId(), clientDefinition.getCallbackUrl(), exception);
             }
         }
     }
@@ -68,7 +68,7 @@ public class WcdkProcessClientCallbackServiceImpl implements WcdkProcessClientCa
                 .clientName(request.getClientName())
                 .processBeanName("register_bak")
                 .eventType("REGISTER_SUCCESS")
-                .message("�ͻ���ע��ɹ�")
+                .message("客户端注册成功")
                 .eventTime(LocalDateTime.now())
                 .build();
         try {
@@ -80,7 +80,7 @@ public class WcdkProcessClientCallbackServiceImpl implements WcdkProcessClientCa
                     .retrieve()
                     .toBodilessEntity();
         } catch (Exception exception) {
-            log.warn("�ͻ���ע��ɹ��ص�ʧ�ܣ�clientId={}, callbackUrl={}", request.getClientId(), callbackUrl, exception);
+            log.warn("客户端注册成功回调失败，clientId={}, callbackUrl={}", request.getClientId(), callbackUrl, exception);
         }
     }
 

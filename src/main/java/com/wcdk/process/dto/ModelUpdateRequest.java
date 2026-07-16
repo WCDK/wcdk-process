@@ -17,17 +17,17 @@ import lombok.NoArgsConstructor;
 public class ModelUpdateRequest {
 
     /**
-     * ģ������
+     * 模型名称
      */
     private String modelName;
 
     /**
-     * ģ�ͷ���
+     * 模型分类
      */
     private String category;
 
     /**
-     * BPMN XML ����
+     * BPMN XML 内容
      */
     private String bpmnXml;
 }

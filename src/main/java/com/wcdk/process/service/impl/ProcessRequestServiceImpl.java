@@ -103,13 +103,13 @@ public class ProcessRequestServiceImpl extends ServiceImpl<ProcessRequestMapper,
                 .updateTime(now)
                 .build();
         save(processRequest);
-        log.info("�������봴����ɣ���¼ID={}, ���̵���={}", processRequest.getId(), processRequest.getProcessNo());
+        log.info("流程申请创建完成，记录ID={}, 流程单号={}", processRequest.getId(), processRequest.getProcessNo());
         if (Boolean.TRUE.equals(request.getSubmit())) {
             startProcessAndSync(processRequest);
-            notifyProcessCallback(processRequest, "PROCESS_SUBMITTED", "�����������ύ");
+            notifyProcessCallback(processRequest, "PROCESS_SUBMITTED", "流程申请已提交");
             return getProcessRequest(processRequest.getId());
         }
-        notifyProcessCallback(processRequest, "PROCESS_CREATED", "���������Ѵ���");
+        notifyProcessCallback(processRequest, "PROCESS_CREATED", "流程申请已创建");
         return buildProcessRequestResponse(processRequest);
     }
 
@@ -118,13 +118,13 @@ public class ProcessRequestServiceImpl extends ServiceImpl<ProcessRequestMapper,
     public ProcessRequestResponse submitProcessRequest(Long id) {
         ProcessRequest processRequest = getRequiredProcessRequest(id);
         if (!Objects.equals(ProcessStatusConstant.DRAFT, processRequest.getStatus())) {
-            throw new IllegalArgumentException("��ǰ�������벻�ǲݸ�״̬�������ظ��ύ");
+            throw new IllegalArgumentException("当前流程申请不是草稿状态，不能重复提交");
         }
         processRequest.setStatus(ProcessStatusConstant.PROCESSING);
         processRequest.setUpdateTime(LocalDateTime.now());
         updateById(processRequest);
         startProcessAndSync(processRequest);
-        notifyProcessCallback(processRequest, "PROCESS_SUBMITTED", "�����������ύ");
+        notifyProcessCallback(processRequest, "PROCESS_SUBMITTED", "流程申请已提交");
         return getProcessRequest(id);
     }
 
@@ -138,7 +138,7 @@ public class ProcessRequestServiceImpl extends ServiceImpl<ProcessRequestMapper,
         ProcessRequest processRequest = getRequiredProcessRequest(id);
         String processDefinitionId = resolveProcessDefinitionId(processRequest);
         if (!StringUtils.hasText(processDefinitionId)) {
-            throw new IllegalArgumentException("δ��ѯ����Ӧ���̶��壬�޷�չʾ����ͼ");
+            throw new IllegalArgumentException("未查询到对应流程定义，无法展示流程图");
         }
         ProcessDefinitionDetailResponse detailResponse = flowableDeployService.getProcessDefinitionDetail(processDefinitionId);
         return ProcessDefinitionDetailResponse.builder()
@@ -199,25 +199,25 @@ public class ProcessRequestServiceImpl extends ServiceImpl<ProcessRequestMapper,
     @Transactional(rollbackFor = Exception.class)
     public void approveProcessRequest(ProcessRequestApproveRequest request) {
         if (!StringUtils.hasText(request.getTaskId())) {
-            throw new IllegalArgumentException("����ID����Ϊ��");
+            throw new IllegalArgumentException("任务ID不能为空");
         }
         if (request.getApproved() == null) {
-            throw new IllegalArgumentException("�����������Ϊ��");
+            throw new IllegalArgumentException("审批结果不能为空");
         }
         Task task = taskService.createTaskQuery().taskId(request.getTaskId()).singleResult();
         if (task == null) {
-            throw new IllegalArgumentException("δ�ҵ���Ӧ��������ID��" + request.getTaskId());
+            throw new IllegalArgumentException("未找到对应任务，任务ID：" + request.getTaskId());
         }
         ProcessRequest processRequest = getProcessRequestByProcessInstanceId(task.getProcessInstanceId());
         Map<String, Object> variables = new HashMap<>();
         variables.put(APPROVED_VARIABLE_NAME, request.getApproved());
         variables.put("comment", request.getComment());
-        log.info("����������������taskId={}, approved={}", request.getTaskId(), request.getApproved());
+        log.info("处理流程审批任务，taskId={}, approved={}", request.getTaskId(), request.getApproved());
         taskService.complete(request.getTaskId(), variables);
         syncProcessRequestState(processRequest);
         notifyProcessCallback(processRequest,
                 Boolean.TRUE.equals(request.getApproved()) ? "PROCESS_APPROVED" : "PROCESS_REJECTED",
-                Boolean.TRUE.equals(request.getApproved()) ? "����������ͨ��" : "���������Ѿܾ�");
+                Boolean.TRUE.equals(request.getApproved()) ? "流程申请已通过" : "流程申请已拒绝");
     }
 
     @Override
@@ -240,20 +240,20 @@ public class ProcessRequestServiceImpl extends ServiceImpl<ProcessRequestMapper,
                 runtimeService.deleteProcessInstance(processRequest.getProcessInstanceId(), resolveDeleteReason(deleteReason));
             }
         }
-        notifyProcessCallback(processRequest, "PROCESS_DELETED", "����������ɾ��");
+        notifyProcessCallback(processRequest, "PROCESS_DELETED", "流程申请已删除");
         removeById(id);
-        log.info("ɾ������������ɣ���¼ID={}, ����ʵ��ID={}", id, processRequest.getProcessInstanceId());
+        log.info("删除流程申请完成，记录ID={}, 流程实例ID={}", id, processRequest.getProcessInstanceId());
     }
 
     private void validateCreateRequest(ProcessRequestCreateRequest request) {
         if (request == null) {
-            throw new IllegalArgumentException("���̴���������Ϊ��");
+            throw new IllegalArgumentException("流程创建请求不能为空");
         }
         if (!StringUtils.hasText(request.getProcessDefinitionKey())) {
-            throw new IllegalArgumentException("���̶����ʶ����Ϊ��");
+            throw new IllegalArgumentException("流程定义标识不能为空");
         }
         if (!StringUtils.hasText(request.getTaskName())) {
-            throw new IllegalArgumentException("�������Ʋ���Ϊ��");
+            throw new IllegalArgumentException("任务名称不能为空");
         }
     }
 
@@ -275,7 +275,7 @@ public class ProcessRequestServiceImpl extends ServiceImpl<ProcessRequestMapper,
         if (StringUtils.hasText(processBeanName)) {
             variables.putIfAbsent(PROCESS_BEAN_NAME, processBeanName);
         }
-        log.info("启动流程实例，processNo={}, processDefinitionKey={}", processRequest.getProcessNo(), processRequest.getProcessDefinitionKey());
+        log.info("鍚姩娴佺▼瀹炰緥锛宲rocessNo={}, processDefinitionKey={}", processRequest.getProcessNo(), processRequest.getProcessDefinitionKey());
         ProcessInstance processInstance = runtimeService.startProcessInstanceByKey(
                 processRequest.getProcessDefinitionKey(),
                 processRequest.getProcessNo(),
@@ -312,7 +312,7 @@ public class ProcessRequestServiceImpl extends ServiceImpl<ProcessRequestMapper,
         }
         processRequest.setUpdateTime(LocalDateTime.now());
         updateById(processRequest);
-        log.info("ͬ����������״̬��ɣ���¼ID={}, ״̬={}", processRequest.getId(), processRequest.getStatus());
+        log.info("同步流程申请状态完成，记录ID={}, 状态={}", processRequest.getId(), processRequest.getStatus());
     }
 
     private Object getHistoricVariableValue(String processInstanceId, String variableName) {
@@ -326,7 +326,7 @@ public class ProcessRequestServiceImpl extends ServiceImpl<ProcessRequestMapper,
     private ProcessRequest getRequiredProcessRequest(Long id) {
         ProcessRequest processRequest = getById(id);
         if (processRequest == null) {
-            throw new IllegalArgumentException("δ�ҵ���Ӧ�������룬ID��" + id);
+            throw new IllegalArgumentException("未找到对应流程申请，ID：" + id);
         }
         return processRequest;
     }
@@ -334,7 +334,7 @@ public class ProcessRequestServiceImpl extends ServiceImpl<ProcessRequestMapper,
     private ProcessRequest getProcessRequestByProcessInstanceId(String processInstanceId) {
         ProcessRequest processRequest = baseMapper.selectByProcessInstanceId(processInstanceId);
         if (processRequest == null) {
-            throw new IllegalArgumentException("δ�ҵ���Ӧ�������룬����ʵ��ID��" + processInstanceId);
+            throw new IllegalArgumentException("未找到对应流程申请，流程实例ID：" + processInstanceId);
         }
         return processRequest;
     }
@@ -382,7 +382,7 @@ public class ProcessRequestServiceImpl extends ServiceImpl<ProcessRequestMapper,
             Map<String, Object> parsed = JSON.parseObject(formDataJson, MAP_TYPE);
             return parsed == null ? new LinkedHashMap<>() : new LinkedHashMap<>(parsed);
         } catch (Exception ex) {
-            log.warn("解析表单数据失败，返回空对象，原始�?{}", formDataJson, ex);
+            log.warn("瑙ｆ瀽琛ㄥ崟鏁版嵁澶辫触锛岃繑鍥炵┖瀵硅薄锛屽師濮嬪€?{}", formDataJson, ex);
             return new LinkedHashMap<>();
         }
     }
@@ -534,7 +534,7 @@ public class ProcessRequestServiceImpl extends ServiceImpl<ProcessRequestMapper,
     }
 
     private String resolveDeleteReason(String deleteReason) {
-        return StringUtils.hasText(deleteReason) ? deleteReason.trim() : "流程中心手动删除";
+        return StringUtils.hasText(deleteReason) ? deleteReason.trim() : "娴佺▼涓績鎵嬪姩鍒犻櫎";
     }
 
     private Set<String> resolveDefinitionKeysByCategory(String category) {

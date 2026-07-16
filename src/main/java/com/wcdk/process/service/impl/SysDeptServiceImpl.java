@@ -82,20 +82,20 @@ public class SysDeptServiceImpl extends ServiceImpl<SysDeptMapper, SysDept> impl
         SysDept entity = getRequiredDept(id);
         long childrenCount = lambdaQuery().eq(SysDept::getParentId, id).count();
         if (childrenCount > 0) {
-            throw new IllegalArgumentException("�ò����´����Ӳ��ţ��޷�ɾ��");
+            throw new IllegalArgumentException("该部门下存在子部门，无法删除");
         }
         removeById(entity.getId());
     }
 
     private void validateRequest(SysDeptSaveRequest request) {
         if (request == null) {
-            throw new IllegalArgumentException("���Ų�������Ϊ��");
+            throw new IllegalArgumentException("部门参数不能为空");
         }
         if (!StringUtils.hasText(request.getDeptCode())) {
-            throw new IllegalArgumentException("���ű��벻��Ϊ��");
+            throw new IllegalArgumentException("部门编码不能为空");
         }
         if (!StringUtils.hasText(request.getDeptName())) {
-            throw new IllegalArgumentException("�������Ʋ���Ϊ��");
+            throw new IllegalArgumentException("部门名称不能为空");
         }
     }
 
@@ -105,14 +105,14 @@ public class SysDeptServiceImpl extends ServiceImpl<SysDeptMapper, SysDept> impl
                 .ne(id != null, SysDept::getId, id)
                 .count();
         if (count > 0) {
-            throw new IllegalArgumentException("���ű����Ѵ���");
+            throw new IllegalArgumentException("部门编码已存在");
         }
     }
 
     private SysDept getRequiredDept(Long id) {
         SysDept entity = getById(id);
         if (entity == null) {
-            throw new IllegalArgumentException("δ�ҵ���Ӧ����");
+            throw new IllegalArgumentException("未找到对应部门");
         }
         return entity;
     }

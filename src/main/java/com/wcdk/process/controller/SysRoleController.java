@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
  **/
 @RestController
 @RequestMapping("/sys/role")
-@Tag(name = "��ɫ����", description = "�ṩ��ɫ��ҳ�����������º�ɾ������")
+@Tag(name = "角色管理", description = "提供角色分页、创建、更新和删除能力")
 public class SysRoleController {
 
     private final SysRoleService sysRoleService;
@@ -34,7 +34,7 @@ public class SysRoleController {
     }
 
     @GetMapping("/list")
-    @Operation(summary = "��ҳ��ѯ��ɫ", description = "����ɫ���ƺ�״̬��ҳ��ѯ��ɫ��Ϣ")
+    @Operation(summary = "分页查询角色", description = "按角色名称和状态分页查询角色信息")
     public ApiResponse<PageResponse<SysRoleResponse>> list(@RequestParam(defaultValue = "1") Long pageNum,
                                                            @RequestParam(defaultValue = "10") Long pageSize,
                                                            @RequestParam(required = false) String roleName,
@@ -44,24 +44,24 @@ public class SysRoleController {
     }
 
     @PostMapping
-    @Operation(summary = "������ɫ", description = "����һ����ɫ�����ؽ�ɫ��Ϣ")
+    @Operation(summary = "新增角色", description = "新增一个角色并返回角色信息")
     public ApiResponse<SysRoleResponse> create(@RequestBody SysRoleSaveRequest request) {
         AuthContextHolder.requirePermission("sys:role:add");
-        return ApiResponse.success("������ɫ�ɹ�", sysRoleService.createRole(request));
+        return ApiResponse.success("新增角色成功", sysRoleService.createRole(request));
     }
 
     @PutMapping("/{id}")
-    @Operation(summary = "�޸Ľ�ɫ", description = "���ݽ�ɫID�޸Ľ�ɫ��Ϣ")
+    @Operation(summary = "修改角色", description = "根据角色ID修改角色信息")
     public ApiResponse<SysRoleResponse> update(@PathVariable Long id, @RequestBody SysRoleSaveRequest request) {
         AuthContextHolder.requirePermission("sys:role:edit");
-        return ApiResponse.success("�޸Ľ�ɫ�ɹ�", sysRoleService.updateRole(id, request));
+        return ApiResponse.success("修改角色成功", sysRoleService.updateRole(id, request));
     }
 
     @DeleteMapping("/{id}")
-    @Operation(summary = "ɾ����ɫ", description = "���ݽ�ɫIDɾ����ɫ��Ϣ")
+    @Operation(summary = "删除角色", description = "根据角色ID删除角色信息")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         AuthContextHolder.requirePermission("sys:role:delete");
         sysRoleService.deleteRole(id);
-        return ApiResponse.success("ɾ����ɫ�ɹ�", null);
+        return ApiResponse.success("删除角色成功", null);
     }
 }

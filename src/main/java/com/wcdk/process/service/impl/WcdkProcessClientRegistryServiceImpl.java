@@ -42,16 +42,16 @@ public class WcdkProcessClientRegistryServiceImpl implements WcdkProcessClientRe
     @Transactional(rollbackFor = Exception.class)
     public void register(WcdkProcessClientRegisterRequest request) {
         if (request == null) {
-            throw new IllegalArgumentException("�ͻ���ע��������Ϊ��");
+            throw new IllegalArgumentException("客户端注册请求不能为空");
         }
         if (!StringUtils.hasText(request.getClientId())) {
-            throw new IllegalArgumentException("�ͻ��˱�ʶ����Ϊ��");
+            throw new IllegalArgumentException("客户端标识不能为空");
         }
         if (!StringUtils.hasText(request.getClientName())) {
-            throw new IllegalArgumentException("�ͻ������Ʋ���Ϊ��");
+            throw new IllegalArgumentException("客户端名称不能为空");
         }
         if (!StringUtils.hasText(request.getCallbackUrl())) {
-            throw new IllegalArgumentException("�ͻ��˻ص���ַ����Ϊ��");
+            throw new IllegalArgumentException("客户端回调地址不能为空");
         }
         String clientId = request.getClientId().trim();
         Set<String> processBeanNames = normalizeProcessBeanNames(request.getProcessBeanNames());
