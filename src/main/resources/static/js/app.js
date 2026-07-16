@@ -115,6 +115,7 @@ new Vue({
                 { path: "/designer", label: "流程设计", icon: "el-icon-edit-outline", description: "进入流程设计工作区", permissionCode: "menu:designer" },
                 { path: "/process", label: "流程中心", icon: "el-icon-s-operation", description: "创建并发布流程实例", permissionCode: "menu:process" },
                 { path: "/task", label: "任务中心", icon: "el-icon-s-check", description: "查询并处理待办任务", permissionCode: "menu:task" },
+                { path: "/client", label: "客户端管理", icon: "el-icon-connection", description: "查看已注册的流程客户端信息", permissionCode: "client:view" },
                 { path: "/system/user", label: "用户管理", icon: "el-icon-user", description: "维护用户、角色归属和状态", permissionCode: "menu:sys:user" },
                 { path: "/system/role", label: "角色管理", icon: "el-icon-s-custom", description: "维护角色和权限绑定关系", permissionCode: "menu:sys:role" },
                 { path: "/system/permission", label: "权限管理", icon: "el-icon-key", description: "维护菜单和按钮权限", permissionCode: "menu:sys:permission" },

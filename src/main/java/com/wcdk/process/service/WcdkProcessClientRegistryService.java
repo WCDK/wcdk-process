@@ -1,7 +1,9 @@
 package com.wcdk.process.service;
 
+import com.wcdk.process.common.PageResponse;
 import com.wcdk.process.dto.WcdkProcessClientDefinition;
 import com.wcdk.process.dto.WcdkProcessClientRegisterRequest;
+import com.wcdk.process.dto.WcdkProcessClientResponse;
 
 import java.util.List;
 
@@ -19,5 +21,13 @@ public interface WcdkProcessClientRegistryService {
     boolean hasProcessBinding(String clientId, String processDefinitionId);
 
     List<WcdkProcessClientDefinition> listByProcessDefinitionId(String processDefinitionId);
-}
 
+    PageResponse<WcdkProcessClientResponse> listClient(long pageNum,
+                                                       long pageSize,
+                                                       String clientId,
+                                                       String clientName,
+                                                       String callbackUrl,
+                                                       String processBeanName,
+                                                       String sortProp,
+                                                       String sortOrder);
+}

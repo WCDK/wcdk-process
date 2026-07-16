@@ -14,6 +14,7 @@ window.AppRouter = new VueRouter({
         { path: "/designer", component: window.ProcessDesigner },
         { path: "/process", component: window.ProcessCenter },
         { path: "/task", component: window.TaskCenter },
+        { path: "/client", component: window.ClientCenter },
         { path: "/system/user", component: window.UserCenter },
         { path: "/system/role", component: window.RoleCenter },
         { path: "/system/permission", component: window.PermissionCenter },

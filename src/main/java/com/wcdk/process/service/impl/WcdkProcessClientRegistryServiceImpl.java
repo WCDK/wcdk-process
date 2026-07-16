@@ -1,8 +1,11 @@
 package com.wcdk.process.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.wcdk.process.common.PageResponse;
 import com.wcdk.process.dto.WcdkProcessClientDefinition;
 import com.wcdk.process.dto.WcdkProcessClientRegisterRequest;
+import com.wcdk.process.dto.WcdkProcessClientResponse;
 import com.wcdk.process.entity.WcdkProcessClient;
 import com.wcdk.process.entity.WcdkProcessClientProcess;
 import com.wcdk.process.mapper.WcdkProcessClientProcessMapper;
@@ -164,6 +167,41 @@ public class WcdkProcessClientRegistryServiceImpl implements WcdkProcessClientRe
                 .toList();
     }
 
+    @Override
+    public PageResponse<WcdkProcessClientResponse> listClient(long pageNum,
+                                                             long pageSize,
+                                                             String clientId,
+                                                             String clientName,
+                                                             String callbackUrl,
+                                                             String processBeanName,
+                                                             String sortProp,
+                                                             String sortOrder) {
+        Set<String> processBeanClientIds = resolveClientIdsByProcessBeanName(processBeanName);
+        if (StringUtils.hasText(processBeanName) && processBeanClientIds.isEmpty()) {
+            return new PageResponse<>(0L, pageNum, pageSize, List.of());
+        }
+        LambdaQueryWrapper<WcdkProcessClient> queryWrapper = new LambdaQueryWrapper<WcdkProcessClient>()
+                .like(StringUtils.hasText(clientId), WcdkProcessClient::getClientId, clientId == null ? null : clientId.trim())
+                .like(StringUtils.hasText(clientName), WcdkProcessClient::getClientName, clientName == null ? null : clientName.trim())
+                .like(StringUtils.hasText(callbackUrl), WcdkProcessClient::getCallbackUrl, callbackUrl == null ? null : callbackUrl.trim())
+                .in(!processBeanClientIds.isEmpty(), WcdkProcessClient::getClientId, processBeanClientIds);
+        applyClientSort(queryWrapper, sortProp, sortOrder);
+        Page<WcdkProcessClient> page = wcdkProcessClientMapper.selectPage(new Page<>(pageNum, pageSize), queryWrapper);
+        List<String> clientIds = page.getRecords().stream()
+                .map(WcdkProcessClient::getClientId)
+                .filter(StringUtils::hasText)
+                .toList();
+        Map<String, List<WcdkProcessClientProcess>> processMap = listClientProcessMap(clientIds);
+        return new PageResponse<>(
+                page.getTotal(),
+                page.getCurrent(),
+                page.getSize(),
+                page.getRecords().stream()
+                        .map(client -> buildClientResponse(client, processMap.getOrDefault(client.getClientId(), List.of())))
+                        .toList()
+        );
+    }
+
     private Set<String> normalizeProcessBeanNames(Set<String> processBeanNames) {
         if (processBeanNames == null || processBeanNames.isEmpty()) {
             return Set.of();
@@ -183,6 +221,75 @@ public class WcdkProcessClientRegistryServiceImpl implements WcdkProcessClientRe
                 .build();
     }
 
+    private Set<String> resolveClientIdsByProcessBeanName(String processBeanName) {
+        if (!StringUtils.hasText(processBeanName)) {
+            return Set.of();
+        }
+        return wcdkProcessClientProcessMapper.selectList(new LambdaQueryWrapper<WcdkProcessClientProcess>()
+                        .like(WcdkProcessClientProcess::getProcessBeanName, processBeanName.trim()))
+                .stream()
+                .map(WcdkProcessClientProcess::getClientId)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+    }
+
+    private void applyClientSort(LambdaQueryWrapper<WcdkProcessClient> queryWrapper, String sortProp, String sortOrder) {
+        boolean ascending = "ascending".equals(sortOrder);
+        if ("clientId".equals(sortProp)) {
+            queryWrapper.orderBy(true, ascending, WcdkProcessClient::getClientId);
+            return;
+        }
+        if ("clientName".equals(sortProp)) {
+            queryWrapper.orderBy(true, ascending, WcdkProcessClient::getClientName);
+            return;
+        }
+        if ("createTime".equals(sortProp)) {
+            queryWrapper.orderBy(true, ascending, WcdkProcessClient::getCreateTime);
+            return;
+        }
+        queryWrapper.orderBy(true, ascending, WcdkProcessClient::getUpdateTime);
+    }
+
+    private Map<String, List<WcdkProcessClientProcess>> listClientProcessMap(List<String> clientIds) {
+        if (clientIds == null || clientIds.isEmpty()) {
+            return Map.of();
+        }
+        return wcdkProcessClientProcessMapper.selectList(new LambdaQueryWrapper<WcdkProcessClientProcess>()
+                        .in(WcdkProcessClientProcess::getClientId, clientIds))
+                .stream()
+                .collect(Collectors.groupingBy(WcdkProcessClientProcess::getClientId));
+    }
+
+    private WcdkProcessClientResponse buildClientResponse(WcdkProcessClient client, List<WcdkProcessClientProcess> clientProcesses) {
+        List<WcdkProcessClientProcess> processRows = clientProcesses == null ? List.of() : clientProcesses;
+        List<String> processBeanNames = processRows.stream()
+                .map(WcdkProcessClientProcess::getProcessBeanName)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
+        List<String> processNames = processRows.stream()
+                .map(WcdkProcessClientProcess::getProcessName)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
+        long processBindingCount = processRows.stream()
+                .filter(row -> StringUtils.hasText(row.getProcessDefinitionId()))
+                .count();
+        return WcdkProcessClientResponse.builder()
+                .id(client.getId())
+                .clientId(client.getClientId())
+                .clientName(client.getClientName())
+                .callbackUrl(client.getCallbackUrl())
+                .authFlg(client.getAuthFlg())
+                .processBeanNames(processBeanNames)
+                .processNames(processNames)
+                .processBeanCount((long) processBeanNames.size())
+                .processBindingCount(processBindingCount)
+                .createTime(client.getCreateTime())
+                .updateTime(client.getUpdateTime())
+                .build();
+    }
+
     private Map<String, String> readHeaders(String authFlg) {
         if (!StringUtils.hasText(authFlg)) {
             return Map.of();
@@ -192,5 +299,3 @@ public class WcdkProcessClientRegistryServiceImpl implements WcdkProcessClientRe
         return header;
     }
 }
-
-
