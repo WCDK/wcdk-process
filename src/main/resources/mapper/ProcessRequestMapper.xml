@@ -2,9 +2,9 @@
 <!DOCTYPE mapper
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.wcdk.proces.mapper.ProcessRequestMapper">
+<mapper namespace="com.wcdk.process.mapper.ProcessRequestMapper">
 
-    <resultMap id="ProcessRequestResultMap" type="com.wcdk.proces.entity.ProcessRequest">
+    <resultMap id="ProcessRequestResultMap" type="com.wcdk.process.entity.ProcessRequest">
         <id property="id" column="ID"/>
         <result property="processNo" column="PROCESS_NO"/>
         <result property="starter" column="STARTER"/>
