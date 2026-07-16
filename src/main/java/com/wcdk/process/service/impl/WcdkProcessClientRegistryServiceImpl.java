@@ -6,6 +6,7 @@ import com.wcdk.process.common.PageResponse;
 import com.wcdk.process.dto.WcdkProcessClientDefinition;
 import com.wcdk.process.dto.WcdkProcessClientRegisterRequest;
 import com.wcdk.process.dto.WcdkProcessClientResponse;
+import com.wcdk.process.dto.WcdkProcessConnectionEvent;
 import com.wcdk.process.entity.WcdkProcessClient;
 import com.wcdk.process.entity.WcdkProcessClientProcess;
 import com.wcdk.process.mapper.WcdkProcessClientProcessMapper;
@@ -13,11 +14,17 @@ import com.wcdk.process.mapper.WcdkProcessClientMapper;
 import com.wcdk.process.service.WcdkProcessClientRegistryService;
 import com.wcdk.process.service.WcdkProcessClientCallbackService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -33,13 +40,22 @@ import java.util.stream.Collectors;
  **/
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class WcdkProcessClientRegistryServiceImpl implements WcdkProcessClientRegistryService {
+
+    private static final String REGISTER_CALLBACK_PATH = "/wcdk_process/register_bak";
+
+    private static final Duration CLIENT_DETECT_TIMEOUT = Duration.ofSeconds(5);
 
     private final WcdkProcessClientMapper wcdkProcessClientMapper;
 
     private final WcdkProcessClientProcessMapper wcdkProcessClientProcessMapper;
 
     private final ObjectProvider<WcdkProcessClientCallbackService> wcdkProcessClientCallbackServiceProvider;
+
+    private final RestClient restClient = RestClient.builder()
+            .requestFactory(buildRequestFactory())
+            .build();
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -202,6 +218,46 @@ public class WcdkProcessClientRegistryServiceImpl implements WcdkProcessClientRe
         );
     }
 
+    @Override
+    public boolean detectClient(String clientId) {
+        WcdkProcessClient client = getRequiredClient(clientId);
+        String callbackUrl = buildRegisterCallbackUrl(client.getCallbackUrl());
+        WcdkProcessConnectionEvent event = WcdkProcessConnectionEvent.builder()
+                .clientId(client.getClientId())
+                .clientName(client.getClientName())
+                .processBeanName("register_bak")
+                .eventType("CLIENT_HEALTH_CHECK")
+                .message("客户端存活检测")
+                .eventTime(LocalDateTime.now())
+                .build();
+        try {
+            restClient.post()
+                    .uri(callbackUrl)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .headers(headers -> {
+                        if (StringUtils.hasText(client.getAuthFlg())) {
+                            headers.set("WCDK_AUTH", client.getAuthFlg().trim());
+                        }
+                    })
+                    .body(event)
+                    .retrieve()
+                    .toBodilessEntity();
+            return true;
+        } catch (RestClientException exception) {
+            log.warn("客户端存活检测失败，clientId={}, callbackUrl={}", client.getClientId(), callbackUrl, exception);
+            return false;
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void removeClient(String clientId) {
+        WcdkProcessClient client = getRequiredClient(clientId);
+        wcdkProcessClientProcessMapper.delete(new LambdaQueryWrapper<WcdkProcessClientProcess>()
+                .eq(WcdkProcessClientProcess::getClientId, client.getClientId()));
+        wcdkProcessClientMapper.deleteById(client.getId());
+    }
+
     private Set<String> normalizeProcessBeanNames(Set<String> processBeanNames) {
         if (processBeanNames == null || processBeanNames.isEmpty()) {
             return Set.of();
@@ -219,6 +275,40 @@ public class WcdkProcessClientRegistryServiceImpl implements WcdkProcessClientRe
                 .callbackUrl(client.getCallbackUrl())
                 .callbackHeaders(readHeaders(client.getAuthFlg()))
                 .build();
+    }
+
+    private static SimpleClientHttpRequestFactory buildRequestFactory() {
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(CLIENT_DETECT_TIMEOUT);
+        requestFactory.setReadTimeout(CLIENT_DETECT_TIMEOUT);
+        return requestFactory;
+    }
+
+    private WcdkProcessClient getRequiredClient(String clientId) {
+        if (!StringUtils.hasText(clientId)) {
+            throw new IllegalArgumentException("客户端标识不能为空");
+        }
+        WcdkProcessClient client = wcdkProcessClientMapper.selectOne(new LambdaQueryWrapper<WcdkProcessClient>()
+                .eq(WcdkProcessClient::getClientId, clientId.trim())
+                .last("LIMIT 1"));
+        if (client == null) {
+            throw new IllegalArgumentException("未查询到客户端注册信息，客户端标识：" + clientId);
+        }
+        return client;
+    }
+
+    private String buildRegisterCallbackUrl(String callbackUrl) {
+        if (!StringUtils.hasText(callbackUrl)) {
+            throw new IllegalArgumentException("客户端回调地址不能为空");
+        }
+        String normalizedUrl = callbackUrl.trim();
+        while (normalizedUrl.endsWith("/")) {
+            normalizedUrl = normalizedUrl.substring(0, normalizedUrl.length() - 1);
+        }
+        if (normalizedUrl.endsWith(REGISTER_CALLBACK_PATH)) {
+            return normalizedUrl;
+        }
+        return normalizedUrl + REGISTER_CALLBACK_PATH;
     }
 
     private Set<String> resolveClientIdsByProcessBeanName(String processBeanName) {
@@ -281,6 +371,7 @@ public class WcdkProcessClientRegistryServiceImpl implements WcdkProcessClientRe
                 .clientName(client.getClientName())
                 .callbackUrl(client.getCallbackUrl())
                 .authFlg(client.getAuthFlg())
+                .clientStatus("未检测")
                 .processBeanNames(processBeanNames)
                 .processNames(processNames)
                 .processBeanCount((long) processBeanNames.size())

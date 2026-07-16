@@ -45,6 +45,13 @@ window.ClientCenter = {
                             <span>{{ scope.row.callbackUrl || "-" }}</span>
                         </template>
                     </el-table-column>
+                    <el-table-column prop="clientStatus" label="客户端状态" min-width="120">
+                        <template slot-scope="scope">
+                            <el-tag :type="resolveClientStatusType(scope.row.clientStatus)" effect="plain">
+                                {{ scope.row.clientStatus || "未检测" }}
+                            </el-tag>
+                        </template>
+                    </el-table-column>
                     <el-table-column prop="processBeanCount" label="处理器数量" width="120"></el-table-column>
                     <el-table-column prop="processBindingCount" label="绑定流程数" width="120"></el-table-column>
                     <el-table-column prop="processBeanNames" label="流程处理器" min-width="220">
@@ -84,6 +91,20 @@ window.ClientCenter = {
                     </el-table-column>
                     <el-table-column prop="updateTime" label="更新时间" min-width="180" sortable="custom">
                         <template slot-scope="scope">{{ formatDateTime(scope.row.updateTime) }}</template>
+                    </el-table-column>
+                    <el-table-column label="操作" min-width="140" fixed="right">
+                        <template slot-scope="scope">
+                            <div class="table-operations">
+                                <el-button type="text" @click.stop="detectClient(scope.row)">检测</el-button>
+                                <el-button
+                                    v-if="$root.hasPermission('client:delete')"
+                                    type="text"
+                                    style="color:#f56c6c;"
+                                    @click.stop="removeClient(scope.row)">
+                                    移除
+                                </el-button>
+                            </div>
+                        </template>
                     </el-table-column>
                 </el-table>
 
@@ -176,6 +197,54 @@ window.ClientCenter = {
             this.sortOrder = payload.order || "descending";
             this.pageNum = 1;
             this.queryList();
+        },
+        detectClient: async function (row) {
+            if (!row || !row.clientId) {
+                this.$root.showError("未查询到客户端标识，无法检测");
+                return;
+            }
+            this.$set(row, "clientStatus", "检测中");
+            try {
+                var result = await window.AppService.requestJson("/wcdk/process/client/" + encodeURIComponent(row.clientId) + "/detect", { method: "POST" });
+                if (result.data === false) {
+                    this.$set(row, "clientStatus", "未存活");
+                    this.$root.showError(result.message || "客户端未存活");
+                    return;
+                }
+                this.$set(row, "clientStatus", "存活");
+                this.$root.showSuccess(result.message || "客户端存活");
+            } catch (error) {
+                this.$set(row, "clientStatus", "未存活");
+                this.$root.showError(error.message || "客户端存活检测失败");
+            }
+        },
+        removeClient: function (row) {
+            if (!row || !row.clientId) {
+                this.$root.showError("未查询到客户端标识，无法移除");
+                return;
+            }
+            var self = this;
+            this.$confirm("移除后将删除该客户端注册信息及流程处理器绑定信息，是否继续？", "移除客户端", {
+                type: "warning",
+                confirmButtonText: "确定移除",
+                cancelButtonText: "取消"
+            }).then(async function () {
+                var result = await window.AppService.request("/wcdk/process/client/" + encodeURIComponent(row.clientId), { method: "DELETE" });
+                self.$root.showSuccess(result.message || "客户端注册信息移除成功");
+                self.queryList();
+            }).catch(function () {});
+        },
+        resolveClientStatusType: function (status) {
+            if (status === "存活") {
+                return "success";
+            }
+            if (status === "未存活") {
+                return "danger";
+            }
+            if (status === "检测中") {
+                return "warning";
+            }
+            return "info";
         },
         formatDateTime: function (value) {
             return window.AppService.formatDateTime(value);

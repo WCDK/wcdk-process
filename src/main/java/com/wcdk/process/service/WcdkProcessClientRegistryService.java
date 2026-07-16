@@ -30,4 +30,8 @@ public interface WcdkProcessClientRegistryService {
                                                        String processBeanName,
                                                        String sortProp,
                                                        String sortOrder);
+
+    boolean detectClient(String clientId);
+
+    void removeClient(String clientId);
 }
