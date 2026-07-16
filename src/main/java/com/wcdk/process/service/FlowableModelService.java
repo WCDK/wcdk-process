@@ -18,7 +18,7 @@ public interface FlowableModelService {
 
     ModelResponse updateModel(String modelId, ModelUpdateRequest request);
 
-    List<ModelResponse> listModel();
+    List<ModelResponse> listModel(String modelName, String modelKey, String category, String deployed);
 
     String getModelXml(String modelId);
 

@@ -9,10 +9,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -30,7 +33,13 @@ public class WcdkProcessClientCallbackServiceImpl implements WcdkProcessClientCa
 
     private static final String REGISTER_CALLBACK_PATH = "/wcdk_process/register_bak";
 
+    private static final Duration CALLBACK_TIMEOUT = Duration.ofSeconds(5);
+
     private final WcdkProcessClientRegistryService wcdkProcessClientRegistryService;
+
+    private final RestClient restClient = RestClient.builder()
+            .requestFactory(buildRequestFactory())
+            .build();
 
     @Override
     public void callback(WcdkProcessConnectionEvent event) {
@@ -44,13 +53,17 @@ public class WcdkProcessClientCallbackServiceImpl implements WcdkProcessClientCa
         }
         for (WcdkProcessClientDefinition clientDefinition : clientDefinitions) {
             try {
-                RestClient.create().post()
+                restClient.post()
                         .uri(clientDefinition.getCallbackUrl())
                         .contentType(MediaType.APPLICATION_JSON)
                         .headers(headers -> applyHeaders(headers, clientDefinition))
                         .body(fillClientInfo(event, clientDefinition))
                         .retrieve()
                         .toBodilessEntity();
+            } catch (RestClientResponseException exception) {
+                log.warn("流程回调客户端失败，clientId={}, callbackUrl={}, statusCode={}, responseBody={}",
+                        clientDefinition.getClientId(), clientDefinition.getCallbackUrl(),
+                        exception.getStatusCode(), exception.getResponseBodyAsString(), exception);
             } catch (Exception exception) {
                 log.warn("流程回调客户端失败，clientId={}, callbackUrl={}", clientDefinition.getClientId(), clientDefinition.getCallbackUrl(), exception);
             }
@@ -72,16 +85,26 @@ public class WcdkProcessClientCallbackServiceImpl implements WcdkProcessClientCa
                 .eventTime(LocalDateTime.now())
                 .build();
         try {
-            RestClient.create().post()
+            restClient.post()
                     .uri(callbackUrl)
                     .contentType(MediaType.APPLICATION_JSON)
                     .headers(headers -> applyRegisterHeaders(headers, request))
                     .body(event)
                     .retrieve()
                     .toBodilessEntity();
+        } catch (RestClientResponseException exception) {
+            log.warn("客户端注册成功回调失败，clientId={}, callbackUrl={}, statusCode={}, responseBody={}",
+                    request.getClientId(), callbackUrl, exception.getStatusCode(), exception.getResponseBodyAsString(), exception);
         } catch (Exception exception) {
             log.warn("客户端注册成功回调失败，clientId={}, callbackUrl={}", request.getClientId(), callbackUrl, exception);
         }
+    }
+
+    private static SimpleClientHttpRequestFactory buildRequestFactory() {
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(CALLBACK_TIMEOUT);
+        requestFactory.setReadTimeout(CALLBACK_TIMEOUT);
+        return requestFactory;
     }
 
     private void applyHeaders(HttpHeaders headers, WcdkProcessClientDefinition clientDefinition) {
@@ -135,5 +158,4 @@ public class WcdkProcessClientCallbackServiceImpl implements WcdkProcessClientCa
                 .build();
     }
 }
-
 

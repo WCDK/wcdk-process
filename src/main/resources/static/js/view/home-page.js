@@ -61,6 +61,6 @@ window.HomePage = {
         }
     },
     mounted: function () {
-        this.$root.reloadAll();
+        this.$root.loadOverview();
     }
 };

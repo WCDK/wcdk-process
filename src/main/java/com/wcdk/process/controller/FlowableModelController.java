@@ -48,8 +48,11 @@ public class FlowableModelController {
 
     @GetMapping("/list")
     @Operation(summary = "查询流程模型列表", description = "查询当前系统中的流程模型列表")
-    public ApiResponse<List<ModelResponse>> listModel() {
-        return ApiResponse.success(flowableModelService.listModel());
+    public ApiResponse<List<ModelResponse>> listModel(@RequestParam(required = false) String modelName,
+                                                      @RequestParam(required = false) String modelKey,
+                                                      @RequestParam(required = false) String category,
+                                                      @RequestParam(required = false) String deployed) {
+        return ApiResponse.success(flowableModelService.listModel(modelName, modelKey, category, deployed));
     }
 
     @GetMapping("/{modelId}/xml")

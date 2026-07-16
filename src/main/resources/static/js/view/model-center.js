@@ -228,20 +228,7 @@ window.ModelCenter = {
     },
     computed: {
         filteredModels: function () {
-            var keywordName = (this.filters.modelName || "").trim().toLowerCase();
-            var keywordKey = (this.filters.modelKey || "").trim().toLowerCase();
-            var keywordCategory = (this.filters.category || "").trim().toLowerCase();
-            var deployed = this.filters.deployed;
-            var list = (this.$root.models || []).filter(function (item) {
-                var matchesName = !keywordName || ((item.modelName || "").toLowerCase().indexOf(keywordName) >= 0);
-                var matchesKey = !keywordKey || ((item.modelKey || "").toLowerCase().indexOf(keywordKey) >= 0);
-                var matchesCategory = !keywordCategory || ((item.category || "").toLowerCase().indexOf(keywordCategory) >= 0);
-                var matchesDeployed = !deployed
-                    || (deployed === "deployed" && !!item.deploymentId)
-                    || (deployed === "undeployed" && !item.deploymentId);
-                return matchesName && matchesKey && matchesCategory && matchesDeployed;
-            });
-            return this.sortItems(list);
+            return this.sortItems(this.$root.models || []);
         },
         pagedModels: function () {
             var startIndex = (this.pageNum - 1) * this.pageSize;
@@ -395,14 +382,15 @@ window.ModelCenter = {
             }).catch(function () {});
         },
         handleRefresh: async function () {
-            await this.$root.loadModels();
+            await this.$root.loadModels(this.filters);
             this.selectFirstModel();
         },
-        handleQuery: function () {
+        handleQuery: async function () {
             this.pageNum = 1;
+            await this.$root.loadModels(this.filters);
             this.selectFirstFromFiltered();
         },
-        handleResetQuery: function () {
+        handleResetQuery: async function () {
             this.filters.modelName = "";
             this.filters.modelKey = "";
             this.filters.category = "";
@@ -410,6 +398,7 @@ window.ModelCenter = {
             this.pageNum = 1;
             this.sortProp = "lastUpdateTime";
             this.sortOrder = "descending";
+            await this.$root.loadModels(this.filters);
             this.selectFirstModel();
         },
         handlePageChange: function (pageNum) {
@@ -660,7 +649,7 @@ window.ModelCenter = {
         }
     },
     mounted: async function () {
-        await this.$root.loadModels();
+        await this.$root.loadModels(this.filters);
         this.selectFirstModel();
     },
     watch: {

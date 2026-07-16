@@ -292,14 +292,7 @@ window.DeployCenter = {
     },
     computed: {
         filteredDeployments: function () {
-            var keywordName = (this.filters.deploymentName || "").trim().toLowerCase();
-            var keywordCategory = (this.filters.category || "").trim().toLowerCase();
-            var list = (this.$root.deployments || []).filter(function (item) {
-                var matchesName = !keywordName || ((item.deploymentName || "").toLowerCase().indexOf(keywordName) >= 0);
-                var matchesCategory = !keywordCategory || ((item.category || "").toLowerCase().indexOf(keywordCategory) >= 0);
-                return matchesName && matchesCategory;
-            });
-            return this.sortItems(list);
+            return this.sortItems(this.$root.deployments || []);
         },
         pagedDeployments: function () {
             var startIndex = (this.pageNum - 1) * this.pageSize;
@@ -446,21 +439,23 @@ window.DeployCenter = {
         },
         handleRefresh: async function () {
             await Promise.all([
-                this.$root.loadDeployments(),
+                this.$root.loadDeployments(this.filters),
                 this.$root.loadDefinitions()
             ]);
             this.selectFirstDeployment();
         },
-        handleQuery: function () {
+        handleQuery: async function () {
             this.pageNum = 1;
+            await this.$root.loadDeployments(this.filters);
             this.selectFirstFromFiltered();
         },
-        handleResetQuery: function () {
+        handleResetQuery: async function () {
             this.filters.deploymentName = "";
             this.filters.category = "";
             this.pageNum = 1;
             this.sortProp = "deployTime";
             this.sortOrder = "descending";
+            await this.$root.loadDeployments(this.filters);
             this.selectFirstDeployment();
         },
         handlePageChange: function (pageNum) {
@@ -791,7 +786,7 @@ window.DeployCenter = {
     },
     mounted: async function () {
         await Promise.all([
-            this.$root.loadDeployments(),
+            this.$root.loadDeployments(this.filters),
             this.$root.loadDefinitions(),
             this.$root.loadModels()
         ]);

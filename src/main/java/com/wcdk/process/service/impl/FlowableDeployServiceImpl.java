@@ -117,13 +117,15 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
     }
 
     @Override
-    public List<DeploymentResponse> listDeployment() {
+    public List<DeploymentResponse> listDeployment(String deploymentName, String category) {
         return repositoryService.createDeploymentQuery()
                 .orderByDeploymentTime()
                 .desc()
                 .list()
                 .stream()
                 .map(this::buildDeploymentResponse)
+                .filter(deployment -> matchesDeploymentName(deployment, deploymentName))
+                .filter(deployment -> matchesCategory(deployment, category))
                 .toList();
     }
 
@@ -227,6 +229,21 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
             throw new IllegalArgumentException("流程名称仅支持中文、字母、数字、点、减号、下划线和中英文括号");
         }
         return trimmedDeploymentName;
+    }
+
+    private boolean matchesDeploymentName(DeploymentResponse deployment, String deploymentName) {
+        return !StringUtils.hasText(deploymentName) || containsIgnoreCase(deployment.getDeploymentName(), deploymentName);
+    }
+
+    private boolean matchesCategory(DeploymentResponse deployment, String category) {
+        return !StringUtils.hasText(category) || containsIgnoreCase(deployment.getCategory(), category);
+    }
+
+    private boolean containsIgnoreCase(String source, String keyword) {
+        if (!StringUtils.hasText(keyword)) {
+            return true;
+        }
+        return StringUtils.hasText(source) && source.toLowerCase().contains(keyword.trim().toLowerCase());
     }
 
     private String validateProcessBeanName(String processBeanName) {

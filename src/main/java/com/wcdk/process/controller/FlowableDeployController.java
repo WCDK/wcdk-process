@@ -43,8 +43,9 @@ public class FlowableDeployController {
 
     @GetMapping("/list")
     @Operation(summary = "查询部署列表", description = "查询当前系统中的流程部署记录列表")
-    public ApiResponse<List<DeploymentResponse>> listDeployment() {
-        return ApiResponse.success(flowableDeployService.listDeployment());
+    public ApiResponse<List<DeploymentResponse>> listDeployment(@RequestParam(required = false) String deploymentName,
+                                                               @RequestParam(required = false) String category) {
+        return ApiResponse.success(flowableDeployService.listDeployment(deploymentName, category));
     }
 
     @GetMapping("/definition/list")

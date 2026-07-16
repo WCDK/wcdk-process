@@ -239,6 +239,7 @@ new Vue({
             }
             try {
                 await Promise.all([
+                    this.loadOverview(),
                     this.loadDeployments(),
                     this.loadDefinitions(),
                     this.loadModels(),
@@ -248,6 +249,14 @@ new Vue({
             } catch (error) {
                 this.showError(error.message || "刷新数据失败");
             }
+        },
+        loadOverview: async function () {
+            var result = await window.AppService.request("/home/overview");
+            var data = result.data || {};
+            this.overview.definitionCount = Number(data.definitionCount || 0);
+            this.overview.modelCount = Number(data.modelCount || 0);
+            this.overview.processCount = Number(data.processCount || 0);
+            this.overview.taskCount = Number(data.taskCount || 0);
         },
         loadBaseOptions: async function () {
             if (!this.currentUser) {
@@ -277,14 +286,21 @@ new Vue({
             var result = await window.AppService.request("/sys/dept/list?pageNum=1&pageSize=500");
             this.deptOptions = (result.data && result.data.records) || [];
         },
-        loadDeployments: async function () {
-            var result = await window.AppService.request("/flowable/deploy/list");
+        loadDeployments: async function (filters) {
+            var nextFilters = filters || {};
+            var query = "";
+            if (nextFilters.deploymentName) {
+                query += (query ? "&" : "?") + "deploymentName=" + encodeURIComponent(nextFilters.deploymentName);
+            }
+            if (nextFilters.category) {
+                query += (query ? "&" : "?") + "category=" + encodeURIComponent(nextFilters.category);
+            }
+            var result = await window.AppService.request("/flowable/deploy/list" + query);
             this.deployments = result.data || [];
         },
         loadDefinitions: async function () {
             var result = await window.AppService.request("/flowable/deploy/definition/list");
             this.processDefinitions = result.data || [];
-            this.overview.definitionCount = this.processDefinitions.length;
         },
         loadProcessDefinitionDetail: async function (processDefinitionId) {
             if (!processDefinitionId) {
@@ -311,10 +327,23 @@ new Vue({
             this.selectedProcessRequestDiagramDetail = result.data || null;
             return result.data || null;
         },
-        loadModels: async function () {
-            var result = await window.AppService.request("/flowable/model/list");
+        loadModels: async function (filters) {
+            var nextFilters = filters || {};
+            var query = "";
+            if (nextFilters.modelName) {
+                query += (query ? "&" : "?") + "modelName=" + encodeURIComponent(nextFilters.modelName);
+            }
+            if (nextFilters.modelKey) {
+                query += (query ? "&" : "?") + "modelKey=" + encodeURIComponent(nextFilters.modelKey);
+            }
+            if (nextFilters.category) {
+                query += (query ? "&" : "?") + "category=" + encodeURIComponent(nextFilters.category);
+            }
+            if (nextFilters.deployed) {
+                query += (query ? "&" : "?") + "deployed=" + encodeURIComponent(nextFilters.deployed);
+            }
+            var result = await window.AppService.request("/flowable/model/list" + query);
             this.models = result.data || [];
-            this.overview.modelCount = this.models.length;
         },
         loadProcesses: async function (pageNum, pageSize) {
             var nextPageNum = pageNum || this.processPageNum || 1;
@@ -344,13 +373,11 @@ new Vue({
             this.processPageSize = Number(pageData.pageSize || nextPageSize);
             this.processTotal = Number(pageData.total || 0);
             this.processList = Array.isArray(pageData.records) ? pageData.records : [];
-            this.overview.processCount = this.processTotal;
         },
         loadTasks: async function (assignee) {
             var query = assignee ? "?assignee=" + encodeURIComponent(assignee) : "";
             var result = await window.AppService.request("/flowable/process/task/list" + query);
             this.taskList = result.data || [];
-            this.overview.taskCount = this.taskList.length;
         },
         createDeployment: async function (payload) {
             var result = await window.AppService.request("/flowable/deploy/process", { method: "POST", body: payload });

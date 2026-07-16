@@ -16,7 +16,7 @@ public interface FlowableDeployService {
 
     DeploymentResponse deployProcess(String deploymentName, String category, String processBeanName, MultipartFile file);
 
-    List<DeploymentResponse> listDeployment();
+    List<DeploymentResponse> listDeployment(String deploymentName, String category);
 
     List<ProcessDefinitionResponse> listProcessDefinition();
 

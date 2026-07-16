@@ -74,13 +74,17 @@ public class FlowableModelServiceImpl implements FlowableModelService {
     }
 
     @Override
-    public List<ModelResponse> listModel() {
+    public List<ModelResponse> listModel(String modelName, String modelKey, String category, String deployed) {
         return repositoryService.createModelQuery()
                 .orderByCreateTime()
                 .desc()
                 .list()
                 .stream()
                 .map(this::buildModelResponse)
+                .filter(model -> matchesModelName(model, modelName))
+                .filter(model -> matchesModelKey(model, modelKey))
+                .filter(model -> matchesCategory(model, category))
+                .filter(model -> matchesDeployed(model, deployed))
                 .toList();
     }
 
@@ -156,6 +160,39 @@ public class FlowableModelServiceImpl implements FlowableModelService {
         return processBeanName.trim();
     }
 
+    private boolean matchesModelName(ModelResponse model, String modelName) {
+        return !StringUtils.hasText(modelName) || containsIgnoreCase(model.getModelName(), modelName);
+    }
+
+    private boolean matchesModelKey(ModelResponse model, String modelKey) {
+        return !StringUtils.hasText(modelKey) || containsIgnoreCase(model.getModelKey(), modelKey);
+    }
+
+    private boolean matchesCategory(ModelResponse model, String category) {
+        return !StringUtils.hasText(category) || containsIgnoreCase(model.getCategory(), category);
+    }
+
+    private boolean matchesDeployed(ModelResponse model, String deployed) {
+        if (!StringUtils.hasText(deployed)) {
+            return true;
+        }
+        String trimmedDeployed = deployed.trim();
+        if ("deployed".equals(trimmedDeployed)) {
+            return StringUtils.hasText(model.getDeploymentId());
+        }
+        if ("undeployed".equals(trimmedDeployed)) {
+            return !StringUtils.hasText(model.getDeploymentId());
+        }
+        return true;
+    }
+
+    private boolean containsIgnoreCase(String source, String keyword) {
+        if (!StringUtils.hasText(keyword)) {
+            return true;
+        }
+        return StringUtils.hasText(source) && source.toLowerCase().contains(keyword.trim().toLowerCase());
+    }
+
     private Model getRequiredModel(String modelId) {
         Model model = repositoryService.getModel(modelId);
         if (model == null) {
@@ -200,5 +237,4 @@ public class FlowableModelServiceImpl implements FlowableModelService {
                 .build();
     }
 }
-
 
