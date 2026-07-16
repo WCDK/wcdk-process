@@ -149,6 +149,27 @@ public class WcdkProcessClientRegistryServiceImpl implements WcdkProcessClientRe
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void bindProcessDefinition(String clientId, String processDefinitionId, String processBeanName, String processName) {
+        if (!StringUtils.hasText(clientId) || !StringUtils.hasText(processDefinitionId) || !StringUtils.hasText(processBeanName)) {
+            return;
+        }
+        String trimmedClientId = clientId.trim();
+        String trimmedProcessDefinitionId = processDefinitionId.trim();
+        String trimmedProcessBeanName = processBeanName.trim();
+        String trimmedProcessName = StringUtils.hasText(processName) ? processName.trim() : null;
+        wcdkProcessClientProcessMapper.delete(new LambdaQueryWrapper<WcdkProcessClientProcess>()
+                .eq(WcdkProcessClientProcess::getProcessDefinitionId, trimmedProcessDefinitionId));
+        wcdkProcessClientProcessMapper.insert(WcdkProcessClientProcess.builder()
+                .clientId(trimmedClientId)
+                .processBeanName(trimmedProcessBeanName)
+                .processDefinitionId(trimmedProcessDefinitionId)
+                .processName(trimmedProcessName)
+                .createTime(LocalDateTime.now())
+                .build());
+    }
+
+    @Override
     public boolean hasProcessBinding(String clientId, String processDefinitionId) {
         if (!StringUtils.hasText(clientId) || !StringUtils.hasText(processDefinitionId)) {
             return false;

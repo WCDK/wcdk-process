@@ -18,6 +18,8 @@ public interface WcdkProcessClientRegistryService {
 
     void bindProcessDefinition(String processDefinitionId, String processBeanName, String processName);
 
+    void bindProcessDefinition(String clientId, String processDefinitionId, String processBeanName, String processName);
+
     boolean hasProcessBinding(String clientId, String processDefinitionId);
 
     List<WcdkProcessClientDefinition> listByProcessDefinitionId(String processDefinitionId);

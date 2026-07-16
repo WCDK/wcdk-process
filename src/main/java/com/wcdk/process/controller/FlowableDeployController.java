@@ -1,10 +1,13 @@
 package com.wcdk.process.controller;
 
 import com.wcdk.process.common.ApiResponse;
+import com.wcdk.process.common.PageResponse;
 import com.wcdk.process.dto.DeploymentResponse;
 import com.wcdk.process.dto.ProcessDefinitionDetailResponse;
 import com.wcdk.process.dto.ProcessDefinitionResponse;
+import com.wcdk.process.dto.WcdkProcessClientResponse;
 import com.wcdk.process.service.FlowableDeployService;
+import com.wcdk.process.service.WcdkProcessClientRegistryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -32,13 +35,16 @@ public class FlowableDeployController {
 
     private final FlowableDeployService flowableDeployService;
 
+    private final WcdkProcessClientRegistryService wcdkProcessClientRegistryService;
+
     @PostMapping("/process")
-    @Operation(summary = "部署流程定义文件", description = "上传流程定义文件并创建流程部署，同时按 processBean 绑定客户端")
+    @Operation(summary = "部署流程定义文件", description = "上传流程定义文件并创建流程部署，可选绑定客户端与流程处理器")
     public ApiResponse<DeploymentResponse> deployProcess(@RequestParam String deploymentName,
                                                          @RequestParam(required = false) String category,
-                                                         @RequestParam String processBeanName,
+                                                         @RequestParam(required = false) String clientId,
+                                                         @RequestParam(required = false) String processBeanName,
                                                          @RequestParam("file") MultipartFile file) {
-        return ApiResponse.success("流程部署成功", flowableDeployService.deployProcess(deploymentName, category, processBeanName, file));
+        return ApiResponse.success("流程部署成功", flowableDeployService.deployProcess(deploymentName, category, clientId, processBeanName, file));
     }
 
     @GetMapping("/list")
@@ -46,6 +52,24 @@ public class FlowableDeployController {
     public ApiResponse<List<DeploymentResponse>> listDeployment(@RequestParam(required = false) String deploymentName,
                                                                @RequestParam(required = false) String category) {
         return ApiResponse.success(flowableDeployService.listDeployment(deploymentName, category));
+    }
+
+    @GetMapping("/client/list")
+    @Operation(summary = "查询部署客户端候选项", description = "查询流程部署时可选择的已注册客户端及其流程处理器")
+    public ApiResponse<PageResponse<WcdkProcessClientResponse>> listClient(@RequestParam(defaultValue = "1") Long pageNum,
+                                                                           @RequestParam(defaultValue = "500") Long pageSize,
+                                                                           @RequestParam(required = false) String clientId,
+                                                                           @RequestParam(required = false) String clientName) {
+        return ApiResponse.success(wcdkProcessClientRegistryService.listClient(
+                pageNum,
+                pageSize,
+                clientId,
+                clientName,
+                null,
+                null,
+                "clientId",
+                "ascending"
+        ));
     }
 
     @GetMapping("/definition/list")

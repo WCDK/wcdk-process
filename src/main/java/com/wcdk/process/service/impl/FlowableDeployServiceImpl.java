@@ -3,6 +3,7 @@ package com.wcdk.process.service.impl;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.wcdk.process.dto.DeploymentResponse;
 import com.wcdk.process.dto.ProcessActionButtonResponse;
 import com.wcdk.process.dto.ProcessDefinitionDetailResponse;
@@ -12,6 +13,10 @@ import com.wcdk.process.dto.ProcessDiagramWaypointResponse;
 import com.wcdk.process.dto.ProcessFormFieldResponse;
 import com.wcdk.process.dto.ProcessFormOptionResponse;
 import com.wcdk.process.dto.ProcessDefinitionResponse;
+import com.wcdk.process.entity.WcdkProcessClient;
+import com.wcdk.process.entity.WcdkProcessClientProcess;
+import com.wcdk.process.mapper.WcdkProcessClientMapper;
+import com.wcdk.process.mapper.WcdkProcessClientProcessMapper;
 import com.wcdk.process.service.FlowableDeployService;
 import com.wcdk.process.service.WcdkProcessClientRegistryService;
 import lombok.RequiredArgsConstructor;
@@ -85,13 +90,18 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
 
     private final WcdkProcessClientRegistryService wcdkProcessClientRegistryService;
 
+    private final WcdkProcessClientProcessMapper wcdkProcessClientProcessMapper;
+
+    private final WcdkProcessClientMapper wcdkProcessClientMapper;
+
     @Override
-    public DeploymentResponse deployProcess(String deploymentName, String category, String processBeanName, MultipartFile file) {
+    public DeploymentResponse deployProcess(String deploymentName, String category, String clientId, String processBeanName, MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("部署文件不能为空");
         }
         String validDeploymentName = validateDeploymentName(deploymentName);
-        String validProcessBeanName = validateProcessBeanName(processBeanName);
+        String validClientId = normalizeOptionalValue(clientId);
+        String validProcessBeanName = normalizeOptionalValue(processBeanName);
         log.info("开始部署流程文件，流程名称：{}，文件名：{}", validDeploymentName, file.getOriginalFilename());
         try {
             byte[] fileBytes = file.getBytes();
@@ -105,7 +115,7 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
                     .addBytes(resourceName, deployBytes)
                     .deploy();
             log.info("流程部署成功，部署ID：{}", deployment.getId());
-            bindDeploymentProcessDefinitions(deployment.getId(), validProcessBeanName);
+            bindDeploymentProcessDefinitions(deployment.getId(), validClientId, validProcessBeanName);
             return buildDeploymentResponse(deployment);
         } catch (IOException ex) {
             log.error("读取流程部署文件失败", ex);
@@ -135,15 +145,19 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
                 .list()
                 .stream()
                 .collect(Collectors.toMap(Deployment::getId, Deployment::getCategory, (left, right) -> right));
-        return repositoryService.createProcessDefinitionQuery()
+        List<ProcessDefinition> processDefinitions = repositoryService.createProcessDefinitionQuery()
                 .latestVersion()
                 .orderByProcessDefinitionVersion()
                 .desc()
-                .list()
-                .stream()
+                .list();
+        Map<String, List<WcdkProcessClientProcess>> bindingMap = listProcessBindingMap(processDefinitions);
+        Map<String, String> clientNameMap = listClientNameMap(bindingMap);
+        return processDefinitions.stream()
                 .map(processDefinition -> buildProcessDefinitionResponse(
                         processDefinition,
-                        deploymentCategoryMap.get(processDefinition.getDeploymentId())
+                        deploymentCategoryMap.get(processDefinition.getDeploymentId()),
+                        bindingMap.getOrDefault(processDefinition.getId(), List.of()),
+                        clientNameMap
                 ))
                 .toList();
     }
@@ -246,21 +260,19 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
         return StringUtils.hasText(source) && source.toLowerCase().contains(keyword.trim().toLowerCase());
     }
 
-    private String validateProcessBeanName(String processBeanName) {
-        if (!StringUtils.hasText(processBeanName)) {
-            throw new IllegalArgumentException("部署流程时必须指定 processBean");
-        }
-        return processBeanName.trim();
+    private String normalizeOptionalValue(String value) {
+        return StringUtils.hasText(value) ? value.trim() : null;
     }
 
-    private void bindDeploymentProcessDefinitions(String deploymentId, String processBeanName) {
-        if (!StringUtils.hasText(deploymentId) || !StringUtils.hasText(processBeanName)) {
+    private void bindDeploymentProcessDefinitions(String deploymentId, String clientId, String processBeanName) {
+        if (!StringUtils.hasText(deploymentId) || !StringUtils.hasText(clientId) || !StringUtils.hasText(processBeanName)) {
             return;
         }
         repositoryService.createProcessDefinitionQuery()
                 .deploymentId(deploymentId)
                 .list()
                 .forEach(processDefinition -> wcdkProcessClientRegistryService.bindProcessDefinition(
+                        clientId,
                         processDefinition.getId(),
                         processBeanName,
                         processDefinition.getName()));
@@ -340,7 +352,24 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
         return resourceNames.get(0);
     }
 
-    private ProcessDefinitionResponse buildProcessDefinitionResponse(ProcessDefinition processDefinition, String category) {
+    private ProcessDefinitionResponse buildProcessDefinitionResponse(ProcessDefinition processDefinition,
+                                                                     String category,
+                                                                     List<WcdkProcessClientProcess> bindings,
+                                                                     Map<String, String> clientNameMap) {
+        List<WcdkProcessClientProcess> bindingRows = bindings == null ? List.of() : bindings;
+        List<String> clientIds = bindingRows.stream()
+                .map(WcdkProcessClientProcess::getClientId)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
+        List<String> clientNames = clientIds.stream()
+                .map(clientId -> StringUtils.hasText(clientNameMap.get(clientId)) ? clientNameMap.get(clientId) : clientId)
+                .toList();
+        List<String> processBeanNames = bindingRows.stream()
+                .map(WcdkProcessClientProcess::getProcessBeanName)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
         return ProcessDefinitionResponse.builder()
                 .processDefinitionId(processDefinition.getId())
                 .processDefinitionKey(processDefinition.getKey())
@@ -350,7 +379,51 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
                 .deploymentId(processDefinition.getDeploymentId())
                 .resourceName(processDefinition.getResourceName())
                 .suspended(processDefinition.isSuspended())
+                .clientIds(clientIds)
+                .clientNames(clientNames)
+                .processBeanNames(processBeanNames)
                 .build();
+    }
+
+    private Map<String, List<WcdkProcessClientProcess>> listProcessBindingMap(List<ProcessDefinition> processDefinitions) {
+        if (processDefinitions == null || processDefinitions.isEmpty()) {
+            return Map.of();
+        }
+        List<String> processDefinitionIds = processDefinitions.stream()
+                .map(ProcessDefinition::getId)
+                .filter(StringUtils::hasText)
+                .toList();
+        if (processDefinitionIds.isEmpty()) {
+            return Map.of();
+        }
+        return wcdkProcessClientProcessMapper.selectList(new LambdaQueryWrapper<WcdkProcessClientProcess>()
+                        .in(WcdkProcessClientProcess::getProcessDefinitionId, processDefinitionIds))
+                .stream()
+                .collect(Collectors.groupingBy(WcdkProcessClientProcess::getProcessDefinitionId));
+    }
+
+    private Map<String, String> listClientNameMap(Map<String, List<WcdkProcessClientProcess>> bindingMap) {
+        if (bindingMap == null || bindingMap.isEmpty()) {
+            return Map.of();
+        }
+        List<String> clientIds = bindingMap.values()
+                .stream()
+                .flatMap(List::stream)
+                .map(WcdkProcessClientProcess::getClientId)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
+        if (clientIds.isEmpty()) {
+            return Map.of();
+        }
+        return wcdkProcessClientMapper.selectList(new LambdaQueryWrapper<WcdkProcessClient>()
+                        .in(WcdkProcessClient::getClientId, clientIds))
+                .stream()
+                .collect(Collectors.toMap(
+                        WcdkProcessClient::getClientId,
+                        client -> StringUtils.hasText(client.getClientName()) ? client.getClientName() : client.getClientId(),
+                        (left, right) -> right
+                ));
     }
 
     private ProcessDiagramNodeResponse buildNodeResponse(BpmnModel bpmnModel, FlowNode node) {

@@ -28,8 +28,41 @@ window.DeployCenter = {
                                     </el-input>
                                     <div class="upload-tip">命名规则：四到五十个字符，支持中文、字母、数字、点、减号、下划线和中英文括号。</div>
                                 </el-form-item>
-                                <el-form-item label="流程分类">
-                                    <el-input v-model.trim="form.category" placeholder="示例：人事流程"></el-input>
+                                 <el-form-item label="流程分类">
+                                     <el-input v-model.trim="form.category" placeholder="示例：人事流程"></el-input>
+                                 </el-form-item>
+                                <el-form-item label="客户端">
+                                    <el-select
+                                        v-model="form.clientId"
+                                        clearable
+                                        filterable
+                                        allow-create
+                                        default-first-option
+                                        placeholder="请选择或输入客户端"
+                                        @change="handleClientChange">
+                                        <el-option
+                                            v-for="client in clientOptions"
+                                            :key="client.clientId"
+                                            :label="formatClientOptionLabel(client)"
+                                            :value="client.clientId">
+                                        </el-option>
+                                    </el-select>
+                                </el-form-item>
+                                <el-form-item label="流程处理器">
+                                    <el-select
+                                        v-model="form.processBeanName"
+                                        clearable
+                                        filterable
+                                        allow-create
+                                        default-first-option
+                                        placeholder="请选择或输入流程处理器">
+                                        <el-option
+                                            v-for="processBeanName in processBeanOptions"
+                                            :key="processBeanName"
+                                            :label="processBeanName"
+                                            :value="processBeanName">
+                                        </el-option>
+                                    </el-select>
                                 </el-form-item>
                                 <el-form-item label="流程定义文件">
                                     <el-upload
@@ -71,20 +104,28 @@ window.DeployCenter = {
                                 <el-form-item label="流程分类">
                                     <el-input v-model.trim="filters.category" placeholder="请输入流程分类"></el-input>
                                 </el-form-item>
-                                <el-form-item>
-                                    <el-button type="primary" @click="handleQuery">查询</el-button>
-                                </el-form-item>
-                            </el-form>
-                        </div>
-                                </el-form-item>
-                                <el-form-item label="流程分类">
-                                    <el-input v-model.trim="filters.category" placeholder="请输入流程分类"></el-input>
+                                <el-form-item label="所属客户端">
+                                    <el-select
+                                        v-model="filters.clientId"
+                                        clearable
+                                        filterable
+                                        allow-create
+                                        default-first-option
+                                        placeholder="请选择或输入客户端">
+                                        <el-option
+                                            v-for="client in clientOptions"
+                                            :key="'filter-' + client.clientId"
+                                            :label="formatClientOptionLabel(client)"
+                                            :value="client.clientId">
+                                        </el-option>
+                                    </el-select>
                                 </el-form-item>
                                 <el-form-item>
                                     <el-button type="primary" @click="handleQuery">查询</el-button>
                                     <el-button @click="handleResetQuery">重置</el-button>
                                 </el-form-item>
                             </el-form>
+                        </div>
 
                             <el-table
                                 :data="pagedDeployments"
@@ -100,6 +141,16 @@ window.DeployCenter = {
                                 <el-table-column prop="category" label="流程分类" min-width="140" sortable="custom">
                                     <template slot-scope="scope">
                                         {{ scope.row.category || "-" }}
+                                    </template>
+                                </el-table-column>
+                                <el-table-column label="所属客户端" min-width="180">
+                                    <template slot-scope="scope">
+                                        {{ formatListText(resolveDeploymentClientNames(scope.row.deploymentId)) }}
+                                    </template>
+                                </el-table-column>
+                                <el-table-column label="绑定处理器" min-width="180">
+                                    <template slot-scope="scope">
+                                        {{ formatListText(resolveDeploymentProcessBeanNames(scope.row.deploymentId)) }}
                                     </template>
                                 </el-table-column>
                                 <el-table-column prop="deployTime" label="部署时间" min-width="180" sortable="custom">
@@ -270,13 +321,17 @@ window.DeployCenter = {
             activeTab: "create",
             form: {
                 deploymentName: "",
-                category: ""
+                category: "",
+                clientId: "",
+                processBeanName: ""
             },
             selectedFile: null,
             fileList: [],
+            clientOptions: [],
             filters: {
                 deploymentName: "",
-                category: ""
+                category: "",
+                clientId: ""
             },
             pageNum: 1,
             pageSize: 10,
@@ -292,7 +347,9 @@ window.DeployCenter = {
     },
     computed: {
         filteredDeployments: function () {
-            return this.sortItems(this.$root.deployments || []);
+            return this.sortItems((this.$root.deployments || []).filter(function (deployment) {
+                return this.matchesDeploymentClient(deployment);
+            }, this));
         },
         pagedDeployments: function () {
             var startIndex = (this.pageNum - 1) * this.pageSize;
@@ -336,10 +393,103 @@ window.DeployCenter = {
                 return "";
             }
             return this.findModelByDeploymentId(this.previewDeploymentId) ? "MODEL_SOURCE" : "DEPLOYED_DEFINITION";
+        },
+        selectedClient: function () {
+            var clientId = this.form.clientId;
+            if (!clientId) {
+                return null;
+            }
+            for (var index = 0; index < this.clientOptions.length; index += 1) {
+                if (this.clientOptions[index].clientId === clientId) {
+                    return this.clientOptions[index];
+                }
+            }
+            return null;
+        },
+        processBeanOptions: function () {
+            var sourceClients = this.selectedClient ? [this.selectedClient] : this.clientOptions;
+            var optionMap = {};
+            sourceClients.forEach(function (client) {
+                (client.processBeanNames || []).forEach(function (processBeanName) {
+                    if (processBeanName) {
+                        optionMap[processBeanName] = true;
+                    }
+                });
+            });
+            return Object.keys(optionMap).sort();
         }
     },
     methods: {
         formatDateTime: window.AppService.formatDateTime,
+        formatClientOptionLabel: function (client) {
+            if (!client) {
+                return "";
+            }
+            return client.clientName ? client.clientId + "（" + client.clientName + "）" : client.clientId;
+        },
+        formatListText: function (values) {
+            var list = (values || []).filter(function (value) {
+                return !!value;
+            });
+            return list.length ? list.join("、") : "-";
+        },
+        resolveDeploymentDefinitions: function (deploymentId) {
+            if (!deploymentId) {
+                return [];
+            }
+            return (this.$root.processDefinitions || []).filter(function (definition) {
+                return definition.deploymentId === deploymentId;
+            });
+        },
+        resolveDeploymentClientNames: function (deploymentId) {
+            return this.collectDefinitionValues(deploymentId, "clientNames");
+        },
+        resolveDeploymentClientIds: function (deploymentId) {
+            return this.collectDefinitionValues(deploymentId, "clientIds");
+        },
+        resolveDeploymentProcessBeanNames: function (deploymentId) {
+            return this.collectDefinitionValues(deploymentId, "processBeanNames");
+        },
+        collectDefinitionValues: function (deploymentId, fieldName) {
+            var valueMap = {};
+            this.resolveDeploymentDefinitions(deploymentId).forEach(function (definition) {
+                (definition[fieldName] || []).forEach(function (value) {
+                    if (value) {
+                        valueMap[value] = true;
+                    }
+                });
+            });
+            return Object.keys(valueMap).sort();
+        },
+        matchesDeploymentClient: function (deployment) {
+            var keyword = (this.filters.clientId || "").trim().toLowerCase();
+            if (!keyword) {
+                return true;
+            }
+            var values = this.resolveDeploymentClientIds(deployment.deploymentId)
+                .concat(this.resolveDeploymentClientNames(deployment.deploymentId));
+            return values.some(function (value) {
+                return String(value || "").toLowerCase().indexOf(keyword) >= 0;
+            });
+        },
+        loadClientOptions: async function () {
+            try {
+                var result = await window.AppService.request("/flowable/deploy/client/list?pageNum=1&pageSize=500");
+                var pageData = result.data || {};
+                this.clientOptions = Array.isArray(pageData.records) ? pageData.records : [];
+            } catch (error) {
+                this.clientOptions = [];
+                this.$root.showError(error.message || "加载客户端列表失败");
+            }
+        },
+        handleClientChange: function () {
+            if (!this.form.processBeanName) {
+                return;
+            }
+            if (this.processBeanOptions.indexOf(this.form.processBeanName) < 0) {
+                this.form.processBeanName = "";
+            }
+        },
         resolveDefinitionLabel: function (definition) {
             var name = definition.processDefinitionName || definition.processDefinitionKey || "Unnamed Process";
             return name + " V" + (definition.version || 1);
@@ -395,6 +545,8 @@ window.DeployCenter = {
         resetForm: function () {
             this.form.deploymentName = "";
             this.form.category = "";
+            this.form.clientId = "";
+            this.form.processBeanName = "";
             this.selectedFile = null;
             this.fileList = [];
             if (this.$refs.upload) {
@@ -415,6 +567,8 @@ window.DeployCenter = {
                 var formData = new FormData();
                 formData.append("deploymentName", this.form.deploymentName.trim());
                 formData.append("category", this.form.category);
+                formData.append("clientId", this.form.clientId || "");
+                formData.append("processBeanName", this.form.processBeanName || "");
                 formData.append("file", this.selectedFile);
                 await this.$root.createDeployment(formData);
                 this.resetForm();
@@ -440,22 +594,30 @@ window.DeployCenter = {
         handleRefresh: async function () {
             await Promise.all([
                 this.$root.loadDeployments(this.filters),
-                this.$root.loadDefinitions()
+                this.$root.loadDefinitions(),
+                this.loadClientOptions()
             ]);
             this.selectFirstDeployment();
         },
         handleQuery: async function () {
             this.pageNum = 1;
-            await this.$root.loadDeployments(this.filters);
+            await Promise.all([
+                this.$root.loadDeployments(this.filters),
+                this.$root.loadDefinitions()
+            ]);
             this.selectFirstFromFiltered();
         },
         handleResetQuery: async function () {
             this.filters.deploymentName = "";
             this.filters.category = "";
+            this.filters.clientId = "";
             this.pageNum = 1;
             this.sortProp = "deployTime";
             this.sortOrder = "descending";
-            await this.$root.loadDeployments(this.filters);
+            await Promise.all([
+                this.$root.loadDeployments(this.filters),
+                this.$root.loadDefinitions()
+            ]);
             this.selectFirstDeployment();
         },
         handlePageChange: function (pageNum) {
@@ -788,7 +950,8 @@ window.DeployCenter = {
         await Promise.all([
             this.$root.loadDeployments(this.filters),
             this.$root.loadDefinitions(),
-            this.$root.loadModels()
+            this.$root.loadModels(),
+            this.loadClientOptions()
         ]);
         this.selectFirstDeployment();
     },
