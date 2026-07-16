@@ -38,8 +38,7 @@ window.DeployCenter = {
                                         filterable
                                         allow-create
                                         default-first-option
-                                        placeholder="请选择或输入客户端"
-                                        @change="handleClientChange">
+                                        placeholder="请选择或输入客户端">
                                         <el-option
                                             v-for="client in clientOptions"
                                             :key="client.clientId"
@@ -55,6 +54,7 @@ window.DeployCenter = {
                                         filterable
                                         allow-create
                                         default-first-option
+                                        :loading="processBeanLoading"
                                         placeholder="请选择或输入流程处理器">
                                         <el-option
                                             v-for="processBeanName in processBeanOptions"
@@ -145,12 +145,12 @@ window.DeployCenter = {
                                 </el-table-column>
                                 <el-table-column label="所属客户端" min-width="180">
                                     <template slot-scope="scope">
-                                        {{ formatListText(resolveDeploymentClientNames(scope.row.deploymentId)) }}
+                                        {{ formatListText(scope.row.clientNames) }}
                                     </template>
                                 </el-table-column>
                                 <el-table-column label="绑定处理器" min-width="180">
                                     <template slot-scope="scope">
-                                        {{ formatListText(resolveDeploymentProcessBeanNames(scope.row.deploymentId)) }}
+                                        {{ formatListText(scope.row.processBeanNames) }}
                                     </template>
                                 </el-table-column>
                                 <el-table-column prop="deployTime" label="部署时间" min-width="180" sortable="custom">
@@ -328,6 +328,8 @@ window.DeployCenter = {
             selectedFile: null,
             fileList: [],
             clientOptions: [],
+            processBeanOptions: [],
+            processBeanLoading: false,
             filters: {
                 deploymentName: "",
                 category: "",
@@ -347,9 +349,7 @@ window.DeployCenter = {
     },
     computed: {
         filteredDeployments: function () {
-            return this.sortItems((this.$root.deployments || []).filter(function (deployment) {
-                return this.matchesDeploymentClient(deployment);
-            }, this));
+            return this.sortItems(this.$root.deployments || []);
         },
         pagedDeployments: function () {
             var startIndex = (this.pageNum - 1) * this.pageSize;
@@ -405,18 +405,6 @@ window.DeployCenter = {
                 }
             }
             return null;
-        },
-        processBeanOptions: function () {
-            var sourceClients = this.selectedClient ? [this.selectedClient] : this.clientOptions;
-            var optionMap = {};
-            sourceClients.forEach(function (client) {
-                (client.processBeanNames || []).forEach(function (processBeanName) {
-                    if (processBeanName) {
-                        optionMap[processBeanName] = true;
-                    }
-                });
-            });
-            return Object.keys(optionMap).sort();
         }
     },
     methods: {
@@ -441,37 +429,6 @@ window.DeployCenter = {
                 return definition.deploymentId === deploymentId;
             });
         },
-        resolveDeploymentClientNames: function (deploymentId) {
-            return this.collectDefinitionValues(deploymentId, "clientNames");
-        },
-        resolveDeploymentClientIds: function (deploymentId) {
-            return this.collectDefinitionValues(deploymentId, "clientIds");
-        },
-        resolveDeploymentProcessBeanNames: function (deploymentId) {
-            return this.collectDefinitionValues(deploymentId, "processBeanNames");
-        },
-        collectDefinitionValues: function (deploymentId, fieldName) {
-            var valueMap = {};
-            this.resolveDeploymentDefinitions(deploymentId).forEach(function (definition) {
-                (definition[fieldName] || []).forEach(function (value) {
-                    if (value) {
-                        valueMap[value] = true;
-                    }
-                });
-            });
-            return Object.keys(valueMap).sort();
-        },
-        matchesDeploymentClient: function (deployment) {
-            var keyword = (this.filters.clientId || "").trim().toLowerCase();
-            if (!keyword) {
-                return true;
-            }
-            var values = this.resolveDeploymentClientIds(deployment.deploymentId)
-                .concat(this.resolveDeploymentClientNames(deployment.deploymentId));
-            return values.some(function (value) {
-                return String(value || "").toLowerCase().indexOf(keyword) >= 0;
-            });
-        },
         loadClientOptions: async function () {
             try {
                 var result = await window.AppService.request("/flowable/deploy/client/list?pageNum=1&pageSize=500");
@@ -482,7 +439,37 @@ window.DeployCenter = {
                 this.$root.showError(error.message || "加载客户端列表失败");
             }
         },
-        handleClientChange: function () {
+        handleClientChange: async function () {
+            await this.loadProcessBeanOptionsByClient();
+            this.syncProcessBeanByClient();
+        },
+        loadProcessBeanOptionsByClient: async function () {
+            var clientId = (this.form.clientId || "").trim();
+            this.processBeanOptions = [];
+            if (!clientId) {
+                this.form.processBeanName = "";
+                return;
+            }
+            this.processBeanLoading = true;
+            try {
+                var result = await window.AppService.request("/flowable/deploy/client/" + encodeURIComponent(clientId) + "/process-bean/list");
+                if ((this.form.clientId || "").trim() !== clientId) {
+                    return;
+                }
+                this.processBeanOptions = Array.isArray(result.data) ? result.data : [];
+            } catch (error) {
+                if ((this.form.clientId || "").trim() !== clientId) {
+                    return;
+                }
+                this.processBeanOptions = [];
+                this.$root.showError(error.message || "加载流程处理器失败");
+            } finally {
+                if ((this.form.clientId || "").trim() === clientId) {
+                    this.processBeanLoading = false;
+                }
+            }
+        },
+        syncProcessBeanByClient: function () {
             if (!this.form.processBeanName) {
                 return;
             }
@@ -547,6 +534,7 @@ window.DeployCenter = {
             this.form.category = "";
             this.form.clientId = "";
             this.form.processBeanName = "";
+            this.processBeanOptions = [];
             this.selectedFile = null;
             this.fileList = [];
             if (this.$refs.upload) {
@@ -601,10 +589,7 @@ window.DeployCenter = {
         },
         handleQuery: async function () {
             this.pageNum = 1;
-            await Promise.all([
-                this.$root.loadDeployments(this.filters),
-                this.$root.loadDefinitions()
-            ]);
+            await this.$root.loadDeployments(this.filters);
             this.selectFirstFromFiltered();
         },
         handleResetQuery: async function () {
@@ -614,10 +599,7 @@ window.DeployCenter = {
             this.pageNum = 1;
             this.sortProp = "deployTime";
             this.sortOrder = "descending";
-            await Promise.all([
-                this.$root.loadDeployments(this.filters),
-                this.$root.loadDefinitions()
-            ]);
+            await this.$root.loadDeployments(this.filters);
             this.selectFirstDeployment();
         },
         handlePageChange: function (pageNum) {
@@ -967,6 +949,9 @@ window.DeployCenter = {
         },
         previewDetail: function () {
             this.$nextTick(this.renderPreviewCanvas);
+        },
+        "form.clientId": function () {
+            this.handleClientChange();
         }
     }
 };

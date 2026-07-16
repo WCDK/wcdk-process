@@ -127,15 +127,26 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
     }
 
     @Override
-    public List<DeploymentResponse> listDeployment(String deploymentName, String category) {
-        return repositoryService.createDeploymentQuery()
+    public List<DeploymentResponse> listDeployment(String deploymentName, String category, String clientId) {
+        List<Deployment> deployments = repositoryService.createDeploymentQuery()
                 .orderByDeploymentTime()
                 .desc()
-                .list()
-                .stream()
-                .map(this::buildDeploymentResponse)
+                .list();
+        List<ProcessDefinition> processDefinitions = repositoryService.createProcessDefinitionQuery().list();
+        Map<String, List<ProcessDefinition>> deploymentDefinitionMap = processDefinitions.stream()
+                .collect(Collectors.groupingBy(ProcessDefinition::getDeploymentId));
+        Map<String, List<WcdkProcessClientProcess>> bindingMap = listProcessBindingMap(processDefinitions);
+        Map<String, String> clientNameMap = listClientNameMap(bindingMap);
+        return deployments.stream()
+                .map(deployment -> buildDeploymentResponse(
+                        deployment,
+                        deploymentDefinitionMap.getOrDefault(deployment.getId(), List.of()),
+                        bindingMap,
+                        clientNameMap
+                ))
                 .filter(deployment -> matchesDeploymentName(deployment, deploymentName))
                 .filter(deployment -> matchesCategory(deployment, category))
+                .filter(deployment -> matchesClient(deployment, clientId))
                 .toList();
     }
 
@@ -253,6 +264,17 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
         return !StringUtils.hasText(category) || containsIgnoreCase(deployment.getCategory(), category);
     }
 
+    private boolean matchesClient(DeploymentResponse deployment, String clientId) {
+        if (!StringUtils.hasText(clientId)) {
+            return true;
+        }
+        String keyword = clientId.trim().toLowerCase(Locale.ROOT);
+        return deployment.getClientIds().stream()
+                .anyMatch(value -> containsIgnoreCase(value, keyword))
+                || deployment.getClientNames().stream()
+                .anyMatch(value -> containsIgnoreCase(value, keyword));
+    }
+
     private boolean containsIgnoreCase(String source, String keyword) {
         if (!StringUtils.hasText(keyword)) {
             return true;
@@ -332,6 +354,42 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
                 .fileName(resolveDeploymentFileName(deployment.getId()))
                 .category(deployment.getCategory())
                 .deployTime(deployment.getDeploymentTime())
+                .clientIds(List.of())
+                .clientNames(List.of())
+                .processBeanNames(List.of())
+                .build();
+    }
+
+    private DeploymentResponse buildDeploymentResponse(Deployment deployment,
+                                                       List<ProcessDefinition> processDefinitions,
+                                                       Map<String, List<WcdkProcessClientProcess>> bindingMap,
+                                                       Map<String, String> clientNameMap) {
+        List<WcdkProcessClientProcess> bindings = (processDefinitions == null ? List.<ProcessDefinition>of() : processDefinitions)
+                .stream()
+                .flatMap(processDefinition -> bindingMap.getOrDefault(processDefinition.getId(), List.of()).stream())
+                .toList();
+        List<String> clientIds = bindings.stream()
+                .map(WcdkProcessClientProcess::getClientId)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
+        List<String> clientNames = clientIds.stream()
+                .map(clientId -> StringUtils.hasText(clientNameMap.get(clientId)) ? clientNameMap.get(clientId) : clientId)
+                .toList();
+        List<String> processBeanNames = bindings.stream()
+                .map(WcdkProcessClientProcess::getProcessBeanName)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
+        return DeploymentResponse.builder()
+                .deploymentId(deployment.getId())
+                .deploymentName(deployment.getName())
+                .fileName(resolveDeploymentFileName(deployment.getId()))
+                .category(deployment.getCategory())
+                .deployTime(deployment.getDeploymentTime())
+                .clientIds(clientIds)
+                .clientNames(clientNames)
+                .processBeanNames(processBeanNames)
                 .build();
     }
 

@@ -50,8 +50,9 @@ public class FlowableDeployController {
     @GetMapping("/list")
     @Operation(summary = "查询部署列表", description = "查询当前系统中的流程部署记录列表")
     public ApiResponse<List<DeploymentResponse>> listDeployment(@RequestParam(required = false) String deploymentName,
-                                                               @RequestParam(required = false) String category) {
-        return ApiResponse.success(flowableDeployService.listDeployment(deploymentName, category));
+                                                               @RequestParam(required = false) String category,
+                                                               @RequestParam(required = false) String clientId) {
+        return ApiResponse.success(flowableDeployService.listDeployment(deploymentName, category, clientId));
     }
 
     @GetMapping("/client/list")
@@ -60,16 +61,18 @@ public class FlowableDeployController {
                                                                            @RequestParam(defaultValue = "500") Long pageSize,
                                                                            @RequestParam(required = false) String clientId,
                                                                            @RequestParam(required = false) String clientName) {
-        return ApiResponse.success(wcdkProcessClientRegistryService.listClient(
+        return ApiResponse.success(wcdkProcessClientRegistryService.listClientOption(
                 pageNum,
                 pageSize,
                 clientId,
-                clientName,
-                null,
-                null,
-                "clientId",
-                "ascending"
+                clientName
         ));
+    }
+
+    @GetMapping("/client/{clientId}/process-bean/list")
+    @Operation(summary = "查询客户端流程处理器", description = "根据客户端标识查询该客户端注册的流程处理器")
+    public ApiResponse<List<String>> listClientProcessBean(@PathVariable String clientId) {
+        return ApiResponse.success(wcdkProcessClientRegistryService.listProcessBeanNameByClientId(clientId));
     }
 
     @GetMapping("/definition/list")

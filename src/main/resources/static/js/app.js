@@ -296,6 +296,9 @@ new Vue({
             if (nextFilters.category) {
                 query += (query ? "&" : "?") + "category=" + encodeURIComponent(nextFilters.category);
             }
+            if (nextFilters.clientId) {
+                query += (query ? "&" : "?") + "clientId=" + encodeURIComponent(nextFilters.clientId);
+            }
             var result = await window.AppService.request("/flowable/deploy/list" + query);
             this.deployments = result.data || [];
         },

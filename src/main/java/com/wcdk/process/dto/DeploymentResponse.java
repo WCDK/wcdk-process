@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.util.Date;
+import java.util.List;
 
 /**
  * @auther WCDK
@@ -23,4 +24,10 @@ public class DeploymentResponse {
     private String category;
 
     private Date deployTime;
+
+    private List<String> clientIds;
+
+    private List<String> clientNames;
+
+    private List<String> processBeanNames;
 }

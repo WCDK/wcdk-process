@@ -205,6 +205,39 @@ public class WcdkProcessClientRegistryServiceImpl implements WcdkProcessClientRe
     }
 
     @Override
+    public List<String> listProcessBeanNameByClientId(String clientId) {
+        if (!StringUtils.hasText(clientId)) {
+            return List.of();
+        }
+        return wcdkProcessClientProcessMapper.selectList(new LambdaQueryWrapper<WcdkProcessClientProcess>()
+                        .eq(WcdkProcessClientProcess::getClientId, clientId.trim())
+                        .isNull(WcdkProcessClientProcess::getProcessDefinitionId))
+                .stream()
+                .map(WcdkProcessClientProcess::getProcessBeanName)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
+    @Override
+    public PageResponse<WcdkProcessClientResponse> listClientOption(long pageNum, long pageSize, String clientId, String clientName) {
+        LambdaQueryWrapper<WcdkProcessClient> queryWrapper = new LambdaQueryWrapper<WcdkProcessClient>()
+                .like(StringUtils.hasText(clientId), WcdkProcessClient::getClientId, clientId == null ? null : clientId.trim())
+                .like(StringUtils.hasText(clientName), WcdkProcessClient::getClientName, clientName == null ? null : clientName.trim())
+                .orderByAsc(WcdkProcessClient::getClientId);
+        Page<WcdkProcessClient> page = wcdkProcessClientMapper.selectPage(new Page<>(pageNum, pageSize), queryWrapper);
+        return new PageResponse<>(
+                page.getTotal(),
+                page.getCurrent(),
+                page.getSize(),
+                page.getRecords().stream()
+                        .map(client -> buildClientResponse(client, List.of()))
+                        .toList()
+        );
+    }
+
+    @Override
     public PageResponse<WcdkProcessClientResponse> listClient(long pageNum,
                                                              long pageSize,
                                                              String clientId,

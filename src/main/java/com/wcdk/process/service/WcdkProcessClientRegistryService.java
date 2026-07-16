@@ -24,6 +24,13 @@ public interface WcdkProcessClientRegistryService {
 
     List<WcdkProcessClientDefinition> listByProcessDefinitionId(String processDefinitionId);
 
+    List<String> listProcessBeanNameByClientId(String clientId);
+
+    PageResponse<WcdkProcessClientResponse> listClientOption(long pageNum,
+                                                             long pageSize,
+                                                             String clientId,
+                                                             String clientName);
+
     PageResponse<WcdkProcessClientResponse> listClient(long pageNum,
                                                        long pageSize,
                                                        String clientId,
