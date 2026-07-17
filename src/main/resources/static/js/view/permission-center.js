@@ -52,10 +52,8 @@ window.PermissionCenter = {
                     </el-form-item>
                 </el-form>
                 <el-table
-                    :data="treeRecords"
-                    stripe
-                    row-key="id"
-                    :tree-props="{ children: 'children' }">
+                    :data="records"
+                    stripe>
                     <el-table-column prop="permissionCode" label="权限编码" min-width="180"></el-table-column>
                     <el-table-column prop="permissionName" label="权限名称" min-width="180"></el-table-column>
                     <el-table-column prop="permissionType" label="类型" width="100"></el-table-column>
@@ -107,9 +105,19 @@ window.PermissionCenter = {
                                 </el-select>
                             </el-form-item>
                             <el-form-item label="父级权限">
-                                <el-select v-model="form.parentId" clearable placeholder="请选择父级权限">
-                                    <el-option v-for="item in $root.permissionOptions" :key="item.id" :label="item.permissionName" :value="item.id"></el-option>
-                                </el-select>
+                            
+                            <el-select
+                            v-model="filters.parentId"
+                            clearable
+                            filterable
+                            placeholder="请输入或选择父级权限">
+                             <el-option v-for="item in $root.permissionOptions" :key="item.id" :label="item.permissionName" :value="item.id"></el-option>
+
+                        </el-select>
+                            
+<!--                                <el-select v-model="form.parentId" clearable placeholder="请选择父级权限">-->
+<!--                                    <el-option v-for="item in $root.permissionOptions" :key="item.id" :label="item.permissionName" :value="item.id"></el-option>-->
+<!--                                </el-select>-->
                             </el-form-item>
                             <el-form-item label="排序号">
                                 <el-input v-model.number="form.sortNo" type="number" placeholder="请输入排序号"></el-input>
@@ -165,26 +173,6 @@ window.PermissionCenter = {
                 remark: ""
             }
         };
-    },
-    computed: {
-        treeRecords: function () {
-            var nodeMap = {};
-            var roots = [];
-            (this.records || []).forEach(function (item) {
-                nodeMap[item.id] = Object.assign({}, item, {
-                    children: []
-                });
-            });
-            Object.keys(nodeMap).forEach(function (key) {
-                var node = nodeMap[key];
-                if (node.parentId && nodeMap[node.parentId]) {
-                    nodeMap[node.parentId].children.push(node);
-                } else {
-                    roots.push(node);
-                }
-            });
-            return roots;
-        }
     },
     mounted: function () {
         this.queryList();

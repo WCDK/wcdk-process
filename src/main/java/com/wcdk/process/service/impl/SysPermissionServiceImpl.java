@@ -21,6 +21,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -143,7 +144,7 @@ public class SysPermissionServiceImpl extends ServiceImpl<SysPermissionMapper, S
 
     @Override
     public Set<String> listPermissionCodesByUserId(Long userId) {
-        List<Long> permissionIds = listGrantedPermissionIds(userId);
+        List<Long> permissionIds = listEffectivePermissionIds(userId);
         if (permissionIds.isEmpty()) {
             return Set.of();
         }
@@ -156,7 +157,7 @@ public class SysPermissionServiceImpl extends ServiceImpl<SysPermissionMapper, S
 
     @Override
     public List<PermissionResourceResponse> listPermissionResourcesByUserId(Long userId) {
-        List<Long> permissionIds = listGrantedPermissionIds(userId);
+        List<Long> permissionIds = listEffectivePermissionIds(userId);
         if (permissionIds.isEmpty()) {
             return List.of();
         }
@@ -230,6 +231,39 @@ public class SysPermissionServiceImpl extends ServiceImpl<SysPermissionMapper, S
                 .map(SysRolePermission::getPermissionId)
                 .distinct()
                 .toList();
+    }
+
+    private List<Long> listEffectivePermissionIds(Long userId) {
+        List<Long> grantedPermissionIds = listGrantedPermissionIds(userId);
+        if (grantedPermissionIds.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, SysPermission> permissionMap = list().stream()
+                .collect(Collectors.toMap(SysPermission::getId, item -> item, (left, right) -> left));
+        Set<Long> effectivePermissionIds = new LinkedHashSet<>();
+        for (Long permissionId : grantedPermissionIds) {
+            SysPermission permission = permissionMap.get(permissionId);
+            if (permission == null || !Integer.valueOf(1).equals(permission.getStatus())) {
+                continue;
+            }
+            effectivePermissionIds.add(permissionId);
+            collectParentPermissionIds(permission.getParentId(), permissionMap, effectivePermissionIds);
+        }
+        return new ArrayList<>(effectivePermissionIds);
+    }
+
+    private void collectParentPermissionIds(Long parentId,
+                                            Map<Long, SysPermission> permissionMap,
+                                            Set<Long> effectivePermissionIds) {
+        Long nextParentId = parentId;
+        while (nextParentId != null) {
+            SysPermission parentPermission = permissionMap.get(nextParentId);
+            if (parentPermission == null || !Integer.valueOf(1).equals(parentPermission.getStatus())) {
+                return;
+            }
+            effectivePermissionIds.add(parentPermission.getId());
+            nextParentId = parentPermission.getParentId();
+        }
     }
 
     private List<PermissionResourceResponse> buildResourceTree(List<SysPermission> permissions) {

@@ -92,7 +92,6 @@ window.RoleCenter = {
                                         ref="permissionTree"
                                         node-key="id"
                                         show-checkbox
-                                        default-expand-all
                                         :data="permissionTreeData"
                                         :props="permissionTreeProps"
                                         @check="handlePermissionTreeCheck">

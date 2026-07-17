@@ -1,8 +1,6 @@
 package com.wcdk.process.entity;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -24,6 +22,7 @@ public class SysPermission {
     @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private Long parentId;
 
     private String permissionCode;
