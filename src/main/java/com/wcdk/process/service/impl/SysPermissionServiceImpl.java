@@ -3,6 +3,7 @@ package com.wcdk.process.service.impl;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.wcdk.process.common.PageResponse;
+import com.wcdk.process.dto.PermissionResourceResponse;
 import com.wcdk.process.dto.SysPermissionResponse;
 import com.wcdk.process.dto.SysPermissionSaveRequest;
 import com.wcdk.process.entity.SysPermission;
@@ -17,6 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -73,6 +76,7 @@ public class SysPermissionServiceImpl extends ServiceImpl<SysPermissionMapper, S
                 .permissionName(request.getPermissionName().trim())
                 .permissionType(trimValue(request.getPermissionType()))
                 .routePath(trimValue(request.getRoutePath()))
+                .icon(trimValue(request.getIcon()))
                 .sortNo(request.getSortNo() == null ? 0 : request.getSortNo())
                 .status(request.getStatus() == null ? 1 : request.getStatus())
                 .remark(trimValue(request.getRemark()))
@@ -94,6 +98,7 @@ public class SysPermissionServiceImpl extends ServiceImpl<SysPermissionMapper, S
         entity.setPermissionName(request.getPermissionName().trim());
         entity.setPermissionType(trimValue(request.getPermissionType()));
         entity.setRoutePath(trimValue(request.getRoutePath()));
+        entity.setIcon(trimValue(request.getIcon()));
         entity.setSortNo(request.getSortNo() == null ? 0 : request.getSortNo());
         entity.setStatus(request.getStatus() == null ? 1 : request.getStatus());
         entity.setRemark(trimValue(request.getRemark()));
@@ -138,27 +143,29 @@ public class SysPermissionServiceImpl extends ServiceImpl<SysPermissionMapper, S
 
     @Override
     public Set<String> listPermissionCodesByUserId(Long userId) {
-        List<Long> roleIds = sysUserRoleMapper.selectList(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<SysUserRole>()
-                        .eq(SysUserRole::getUserId, userId))
-                .stream()
-                .map(SysUserRole::getRoleId)
-                .toList();
-        if (roleIds.isEmpty()) {
-            return Set.of();
-        }
-        List<Long> permissionIds = sysRolePermissionMapper.selectList(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<SysRolePermission>()
-                        .in(SysRolePermission::getRoleId, roleIds))
-                .stream()
-                .map(SysRolePermission::getPermissionId)
-                .distinct()
-                .toList();
+        List<Long> permissionIds = listGrantedPermissionIds(userId);
         if (permissionIds.isEmpty()) {
             return Set.of();
         }
         return super.listByIds(permissionIds).stream()
+                .filter(item -> Integer.valueOf(1).equals(item.getStatus()))
                 .map(SysPermission::getPermissionCode)
                 .filter(StringUtils::hasText)
                 .collect(Collectors.toSet());
+    }
+
+    @Override
+    public List<PermissionResourceResponse> listPermissionResourcesByUserId(Long userId) {
+        List<Long> permissionIds = listGrantedPermissionIds(userId);
+        if (permissionIds.isEmpty()) {
+            return List.of();
+        }
+        List<SysPermission> permissions = super.listByIds(permissionIds).stream()
+                .filter(item -> Integer.valueOf(1).equals(item.getStatus()))
+                .sorted(Comparator.comparing(SysPermission::getSortNo, Comparator.nullsLast(Integer::compareTo))
+                        .thenComparing(SysPermission::getCreateTime, Comparator.nullsLast(LocalDateTime::compareTo)))
+                .toList();
+        return buildResourceTree(permissions);
     }
 
     private void validateRequest(SysPermissionSaveRequest request) {
@@ -200,10 +207,67 @@ public class SysPermissionServiceImpl extends ServiceImpl<SysPermissionMapper, S
                 .permissionName(entity.getPermissionName())
                 .permissionType(entity.getPermissionType())
                 .routePath(entity.getRoutePath())
+                .icon(entity.getIcon())
                 .sortNo(entity.getSortNo())
                 .status(entity.getStatus())
                 .remark(entity.getRemark())
                 .createTime(entity.getCreateTime())
+                .build();
+    }
+
+    private List<Long> listGrantedPermissionIds(Long userId) {
+        List<Long> roleIds = sysUserRoleMapper.selectList(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<SysUserRole>()
+                        .eq(SysUserRole::getUserId, userId))
+                .stream()
+                .map(SysUserRole::getRoleId)
+                .toList();
+        if (roleIds.isEmpty()) {
+            return List.of();
+        }
+        return sysRolePermissionMapper.selectList(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<SysRolePermission>()
+                        .in(SysRolePermission::getRoleId, roleIds))
+                .stream()
+                .map(SysRolePermission::getPermissionId)
+                .distinct()
+                .toList();
+    }
+
+    private List<PermissionResourceResponse> buildResourceTree(List<SysPermission> permissions) {
+        Map<Long, PermissionResourceResponse> nodeMap = new HashMap<>();
+        List<PermissionResourceResponse> roots = new ArrayList<>();
+        for (SysPermission permission : permissions) {
+            nodeMap.put(permission.getId(), toResourceResponse(permission));
+        }
+        for (PermissionResourceResponse node : nodeMap.values()) {
+            if (node.getParentId() != null && nodeMap.containsKey(node.getParentId())) {
+                nodeMap.get(node.getParentId()).getChildren().add(node);
+                continue;
+            }
+            roots.add(node);
+        }
+        sortResources(roots);
+        return roots;
+    }
+
+    private void sortResources(List<PermissionResourceResponse> resources) {
+        resources.sort(Comparator.comparing(PermissionResourceResponse::getSortNo, Comparator.nullsLast(Integer::compareTo)));
+        for (PermissionResourceResponse resource : resources) {
+            sortResources(resource.getChildren());
+        }
+    }
+
+    private PermissionResourceResponse toResourceResponse(SysPermission permission) {
+        return PermissionResourceResponse.builder()
+                .id(permission.getId())
+                .parentId(permission.getParentId())
+                .permissionCode(permission.getPermissionCode())
+                .permissionName(permission.getPermissionName())
+                .permissionType(permission.getPermissionType())
+                .routePath(permission.getRoutePath())
+                .icon(permission.getIcon())
+                .sortNo(permission.getSortNo())
+                .remark(permission.getRemark())
+                .children(new ArrayList<>())
                 .build();
     }
 

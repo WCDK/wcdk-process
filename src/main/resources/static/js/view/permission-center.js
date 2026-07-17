@@ -12,7 +12,7 @@ window.PermissionCenter = {
                         <div class="section-kicker">权限节点维护</div>
                         <h2>权限管理</h2>
                     </div>
-                    <el-button v-if="$root.hasPermission('sys:permission:add')" type="primary" @click="openCreate">新增权限</el-button>
+                    <el-button v-if="$root.hasButton('sys:permission:add')" type="primary" @click="openCreate">新增权限</el-button>
                 </div>
                 <el-form inline class="process-filter-form" @submit.native.prevent="queryList">
                     <el-form-item label="权限名称">
@@ -22,6 +22,8 @@ window.PermissionCenter = {
                         <el-select v-model="filters.permissionType" clearable placeholder="请选择类型">
                             <el-option label="菜单" value="MENU"></el-option>
                             <el-option label="按钮" value="BUTTON"></el-option>
+                            <el-option label="标签页" value="TAB"></el-option>
+                            <el-option label="标签" value="TAG"></el-option>
                         </el-select>
                     </el-form-item>
                     <el-form-item label="父级权限">
@@ -57,6 +59,7 @@ window.PermissionCenter = {
                     <el-table-column prop="permissionCode" label="权限编码" min-width="180"></el-table-column>
                     <el-table-column prop="permissionName" label="权限名称" min-width="180"></el-table-column>
                     <el-table-column prop="permissionType" label="类型" width="100"></el-table-column>
+                    <el-table-column prop="icon" label="图标" min-width="140"></el-table-column>
                     <el-table-column prop="sortNo" label="排序号" width="100"></el-table-column>
                     <el-table-column prop="routePath" label="路由地址" min-width="180"></el-table-column>
                     <el-table-column prop="parentPermissionName" label="父级权限" min-width="160"></el-table-column>
@@ -68,8 +71,8 @@ window.PermissionCenter = {
                     <el-table-column label="操作" min-width="180" fixed="right">
                         <template slot-scope="scope">
                             <div class="table-operations">
-                                <el-button v-if="$root.hasPermission('sys:permission:edit')" type="text" @click="openEdit(scope.row)">编辑</el-button>
-                                <el-button v-if="$root.hasPermission('sys:permission:delete')" type="text" style="color:#f56c6c;" @click="handleDelete(scope.row)">删除</el-button>
+                                <el-button v-if="$root.hasButton('sys:permission:edit')" type="text" @click="openEdit(scope.row)">编辑</el-button>
+                                <el-button v-if="$root.hasButton('sys:permission:delete')" type="text" style="color:#f56c6c;" @click="handleDelete(scope.row)">删除</el-button>
                             </div>
                         </template>
                     </el-table-column>
@@ -99,6 +102,8 @@ window.PermissionCenter = {
                                 <el-select v-model="form.permissionType">
                                     <el-option label="菜单" value="MENU"></el-option>
                                     <el-option label="按钮" value="BUTTON"></el-option>
+                                    <el-option label="标签页" value="TAB"></el-option>
+                                    <el-option label="标签" value="TAG"></el-option>
                                 </el-select>
                             </el-form-item>
                             <el-form-item label="父级权限">
@@ -111,6 +116,9 @@ window.PermissionCenter = {
                             </el-form-item>
                             <el-form-item label="路由地址">
                                 <el-input v-model.trim="form.routePath" placeholder="菜单权限可填写路由"></el-input>
+                            </el-form-item>
+                            <el-form-item label="图标">
+                                <el-input v-model.trim="form.icon" placeholder="菜单图标，例如 el-icon-house"></el-input>
                             </el-form-item>
                             <el-form-item label="状态">
                                 <el-select v-model="form.status">
@@ -151,6 +159,7 @@ window.PermissionCenter = {
                 permissionType: "MENU",
                 parentId: "",
                 routePath: "",
+                icon: "",
                 sortNo: 0,
                 status: 1,
                 remark: ""
@@ -231,6 +240,7 @@ window.PermissionCenter = {
                 permissionType: row.permissionType,
                 parentId: row.parentId,
                 routePath: row.routePath,
+                icon: row.icon,
                 sortNo: row.sortNo,
                 status: row.status,
                 remark: row.remark
@@ -244,6 +254,7 @@ window.PermissionCenter = {
                 permissionType: "MENU",
                 parentId: "",
                 routePath: "",
+                icon: "",
                 sortNo: 0,
                 status: 1,
                 remark: ""

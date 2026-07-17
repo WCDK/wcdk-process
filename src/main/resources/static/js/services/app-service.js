@@ -78,7 +78,7 @@
     }
 
     function handleUnauthorized(response, result) {
-        if (response.status === 401 || response.status === 403 || (result && (result.code === 401 || result.code === 403))) {
+        if (response.status === 401 || (result && result.code === 401)) {
             clearAuth();
             if (window.location.hash !== "#/login") {
                 window.location.hash = "#/login";
@@ -165,6 +165,47 @@
             || permissionCodes.indexOf("*:*:*") >= 0;
     }
 
+    function flattenPermissionResources(resources) {
+        var result = [];
+        function collect(items) {
+            (items || []).forEach(function (item) {
+                result.push(item);
+                collect(item.children || []);
+            });
+        }
+        collect(resources || []);
+        return result;
+    }
+
+    function getPermissionResources(permissionType, currentUser) {
+        var user = currentUser || getCurrentUserCache();
+        var resources = flattenPermissionResources((user && user.permissionResources) || []);
+        if (!permissionType) {
+            return resources;
+        }
+        return resources.filter(function (item) {
+            return item.permissionType === permissionType;
+        });
+    }
+
+    function hasResource(permissionCode, permissionType, currentUser) {
+        if (!hasPermission(permissionCode, currentUser)) {
+            return false;
+        }
+        var user = currentUser || getCurrentUserCache();
+        var permissionCodes = (user && user.permissionCodes) || [];
+        if (permissionCodes.indexOf("*") >= 0 || permissionCodes.indexOf("*:*:*") >= 0) {
+            return true;
+        }
+        var resources = getPermissionResources(permissionType, currentUser);
+        if (!resources.length) {
+            return true;
+        }
+        return resources.some(function (item) {
+            return item.permissionCode === permissionCode;
+        });
+    }
+
     window.AppService = {
         request: request,
         requestJson: requestJson,
@@ -176,6 +217,8 @@
         getCurrentUserCache: getCurrentUserCache,
         setCurrentUserCache: setCurrentUserCache,
         clearAuth: clearAuth,
-        hasPermission: hasPermission
+        hasPermission: hasPermission,
+        getPermissionResources: getPermissionResources,
+        hasResource: hasResource
     };
 })();

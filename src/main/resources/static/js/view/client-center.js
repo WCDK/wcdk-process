@@ -12,7 +12,7 @@ window.ClientCenter = {
                         <div class="section-kicker">流程客户端注册信息</div>
                         <h2>客户端管理</h2>
                     </div>
-                    <el-button @click="queryList">刷新</el-button>
+                    <el-button v-if="$root.hasButton('client:refresh')" @click="queryList">刷新</el-button>
                 </div>
 
                 <el-form inline class="process-filter-form" @submit.native.prevent="queryList">
@@ -95,9 +95,9 @@ window.ClientCenter = {
                     <el-table-column label="操作" min-width="140" fixed="right">
                         <template slot-scope="scope">
                             <div class="table-operations">
-                                <el-button type="text" @click.stop="detectClient(scope.row)">检测</el-button>
+                                <el-button v-if="$root.hasButton('client:detect')" type="text" @click.stop="detectClient(scope.row)">检测</el-button>
                                 <el-button
-                                    v-if="$root.hasPermission('client:delete')"
+                                    v-if="$root.hasButton('client:delete')"
                                     type="text"
                                     style="color:#f56c6c;"
                                     @click.stop="removeClient(scope.row)">

@@ -8,17 +8,17 @@ window.AppRouter = new VueRouter({
     routes: [
         { path: "/", redirect: "/home" },
         { path: "/login", component: window.LoginPage, meta: { publicPage: true } },
-        { path: "/home", component: window.HomePage },
-        { path: "/deploy", component: window.DeployCenter },
-        { path: "/model", component: window.ModelCenter },
-        { path: "/designer", component: window.ProcessDesigner },
-        { path: "/process", component: window.ProcessCenter },
-        { path: "/task", component: window.TaskCenter },
-        { path: "/client", component: window.ClientCenter },
-        { path: "/system/user", component: window.UserCenter },
-        { path: "/system/role", component: window.RoleCenter },
-        { path: "/system/permission", component: window.PermissionCenter },
-        { path: "/system/dept", component: window.DeptCenter }
+        { path: "/home", component: window.HomePage, meta: { permissionCode: "menu:home" } },
+        { path: "/deploy", component: window.DeployCenter, meta: { permissionCode: "menu:deploy" } },
+        { path: "/model", component: window.ModelCenter, meta: { permissionCode: "menu:model" } },
+        { path: "/designer", component: window.ProcessDesigner, meta: { permissionCode: "menu:designer" } },
+        { path: "/process", component: window.ProcessCenter, meta: { permissionCode: "menu:process" } },
+        { path: "/task", component: window.TaskCenter, meta: { permissionCode: "menu:task" } },
+        { path: "/client", component: window.ClientCenter, meta: { permissionCode: "client:view" } },
+        { path: "/system/user", component: window.UserCenter, meta: { permissionCode: "menu:sys:user" } },
+        { path: "/system/role", component: window.RoleCenter, meta: { permissionCode: "menu:sys:role" } },
+        { path: "/system/permission", component: window.PermissionCenter, meta: { permissionCode: "menu:sys:permission" } },
+        { path: "/system/dept", component: window.DeptCenter, meta: { permissionCode: "menu:sys:dept" } }
     ]
 });
 
@@ -34,6 +34,17 @@ window.AppRouter.beforeEach(function (to, from, next) {
     }
     if (!token) {
         next("/login");
+        return;
+    }
+    if (to.meta && to.meta.permissionCode && !window.AppService.hasPermission(to.meta.permissionCode)) {
+        var menus = window.AppService.getPermissionResources("MENU")
+            .filter(function (item) {
+                return item.routePath && window.AppService.hasPermission(item.permissionCode);
+            })
+            .sort(function (left, right) {
+                return Number(left.sortNo || 0) - Number(right.sortNo || 0);
+            });
+        next(menus.length ? menus[0].routePath : "/login");
         return;
     }
     next();

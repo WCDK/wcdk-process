@@ -30,4 +30,6 @@ public class CurrentUserResponse {
     private List<String> roleNames;
 
     private Set<String> permissionCodes;
+
+    private List<PermissionResourceResponse> permissionResources;
 }

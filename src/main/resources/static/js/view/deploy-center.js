@@ -12,11 +12,11 @@ window.DeployCenter = {
                         <div class="section-kicker">流程部署管理</div>
                         <h2>部署中心</h2> <div class="section-kicker">(同一个流程文件反复上传 会覆盖旧的部署信息保)</div>
                     </div>
-                    <el-button @click="handleRefresh">刷新</el-button>
+                    <el-button v-if="$root.hasButton('deploy:refresh')" @click="handleRefresh">刷新</el-button>
                 </div>
 
                 <el-tabs v-model="activeTab" class="center-tabs">
-                    <el-tab-pane label="创建部署" name="create">
+                    <el-tab-pane v-if="$root.hasTab('deploy:tab:create')" label="创建部署" name="create">
                         <el-form label-position="top" @submit.native.prevent="submitDeployment">
                             <div class="form-grid">
                                 <el-form-item label="流程名称">
@@ -89,13 +89,13 @@ window.DeployCenter = {
                                 </el-form-item>
                             </div>
                             <div class="form-actions">
-                                <el-button type="primary" @click="submitDeployment">提交部署</el-button>
+                                <el-button v-if="$root.hasButton('deploy:create')" type="primary" @click="submitDeployment">提交部署</el-button>
                                 <el-button @click="resetForm">重置表单</el-button>
                             </div>
                         </el-form>
                     </el-tab-pane>
 
-                    <el-tab-pane label="流程列表" name="list">
+                    <el-tab-pane v-if="$root.hasTab('deploy:tab:list')" label="流程列表" name="list">
                         <div class="process-list-panel">
                             <el-form inline class="process-filter-form" @submit.native.prevent="handleQuery">
                                 <el-form-item label="流程部署名称">
@@ -160,12 +160,12 @@ window.DeployCenter = {
                                 </el-table-column>
                                 <el-table-column label="操作" min-width="160" fixed="right">
                                     <template slot-scope="scope">
-                                        <el-button type="text" @click.stop="handleStartApproval(scope.row)">发起审批</el-button>
-                                        <el-button type="text" @click.stop="handleEdit(scope.row)">编辑</el-button>
-                                        <el-button type="text" @click.stop="handleView(scope.row)">查看</el-button>
-                                        <el-button type="text" @click.stop="handlePreview(scope.row)">预览</el-button>
-                                        <el-button type="text" @click.stop="handleBindingEdit(scope.row)">修改绑定</el-button>
-                                        <el-button type="text" @click.stop="handleDelete(scope.row.deploymentId)">删除</el-button>
+                                        <el-button v-if="$root.hasButton('deploy:start')" type="text" @click.stop="handleStartApproval(scope.row)">发起审批</el-button>
+                                        <el-button v-if="$root.hasButton('deploy:edit')" type="text" @click.stop="handleEdit(scope.row)">编辑</el-button>
+                                        <el-button v-if="$root.hasButton('deploy:view')" type="text" @click.stop="handleView(scope.row)">查看</el-button>
+                                        <el-button v-if="$root.hasButton('deploy:preview')" type="text" @click.stop="handlePreview(scope.row)">预览</el-button>
+                                        <el-button v-if="$root.hasButton('deploy:binding')" type="text" @click.stop="handleBindingEdit(scope.row)">修改绑定</el-button>
+                                        <el-button v-if="$root.hasButton('deploy:delete')" type="text" @click.stop="handleDelete(scope.row.deploymentId)">删除</el-button>
                                     </template>
                                 </el-table-column>
                             </el-table>
@@ -273,7 +273,7 @@ window.DeployCenter = {
                     </el-form>
                     <span slot="footer" class="dialog-footer">
                         <el-button @click="bindingDialogVisible = false">取消</el-button>
-                        <el-button type="primary" :loading="bindingSaving" @click="submitBinding">保存</el-button>
+                        <el-button v-if="$root.hasButton('deploy:binding')" type="primary" :loading="bindingSaving" @click="submitBinding">保存</el-button>
                     </span>
                 </el-dialog>
                 <el-dialog
@@ -792,7 +792,7 @@ window.DeployCenter = {
             var targetDeploymentId = row && row.deploymentId ? row.deploymentId : "";
             var definitions = this.findDefinitionsByDeploymentId(targetDeploymentId);
             if (!definitions.length) {
-                this.$root.showError("No related process definition found for this deployment");
+                this.$root.showError("找不到此部署的相关流程定义");
                 return;
             }
             var targetDefinition = definitions.slice().sort(function (left, right) {
@@ -810,7 +810,7 @@ window.DeployCenter = {
             var targetDeploymentId = row && row.deploymentId ? row.deploymentId : "";
             var definitions = this.findDefinitionsByDeploymentId(targetDeploymentId);
             if (!definitions.length) {
-                this.$root.showError("No related process definition found for this deployment");
+                this.$root.showError("找不到此部署的相关流程定义");
                 return;
             }
             this.previewDeploymentId = targetDeploymentId;

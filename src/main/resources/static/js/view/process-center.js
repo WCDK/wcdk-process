@@ -12,11 +12,11 @@ window.ProcessCenter = {
                         <div class="section-kicker">流程定义驱动页面</div>
                         <h2>流程中心</h2>
                     </div>
-                    <el-button @click="handleRefresh">刷新</el-button>
+                    <el-button v-if="$root.hasButton('process:refresh')" @click="handleRefresh">刷新</el-button>
                 </div>
 
                 <el-tabs v-model="activeTab" class="process-center-tabs">
-                    <el-tab-pane label="创建流程" name="create">
+                    <el-tab-pane v-if="$root.hasTab('process:tab:create')" label="创建流程" name="create">
                         <div class="process-builder-grid">
                             <div class="process-builder-form">
                                 <el-form label-position="top" @submit.native.prevent="submitByAction(primaryActionButton)">
@@ -120,7 +120,7 @@ window.ProcessCenter = {
 
                                     <div class="process-action-bar">
                                         <el-button
-                                            v-for="button in actionButtons"
+                                            v-for="button in visibleActionButtons"
                                             :key="button.actionKey"
                                             :type="button.buttonType === 'default' ? '' : button.buttonType"
                                             @click="submitByAction(button)">
@@ -165,7 +165,7 @@ window.ProcessCenter = {
                                         <span class="mini-tag">资源名称：{{ selectedDetail.resourceName || "-" }}</span>
                                     </div>
 
-                                    <div class="process-schema-panel" v-if="dynamicFormFields.length || actionButtons.length">
+                                    <div class="process-schema-panel" v-if="dynamicFormFields.length || visibleActionButtons.length">
                                         <div class="schema-chip-list" v-if="dynamicFormFields.length">
                                             <span
                                                 v-for="field in dynamicFormFields"
@@ -174,9 +174,9 @@ window.ProcessCenter = {
                                                 {{ field.label }} / {{ resolveFieldTypeLabel(field) }}
                                             </span>
                                         </div>
-                                        <div class="schema-chip-list" v-if="actionButtons.length">
+                                        <div class="schema-chip-list" v-if="visibleActionButtons.length">
                                             <span
-                                                v-for="button in actionButtons"
+                                                v-for="button in visibleActionButtons"
                                                 :key="'button-' + button.actionKey"
                                                 class="schema-chip schema-chip-action">
                                                 {{ button.label }}
@@ -295,7 +295,7 @@ window.ProcessCenter = {
                         </el-dialog>
                     </el-tab-pane>
 
-                    <el-tab-pane label="流程列表" name="list">
+                    <el-tab-pane v-if="$root.hasTab('process:tab:list')" label="流程列表" name="list">
                     <!--class="process-builder-grid"-->
                         <div >
                             <div class="process-list-panel">
@@ -395,17 +395,19 @@ window.ProcessCenter = {
                                         <template slot-scope="scope">
                                             <div class="table-operations">
                                                 <el-button
+                                                    v-if="$root.hasButton('process:view')"
                                                     type="text"
                                                     @click.stop="openProcessDetail(scope.row)">
                                                     查看
                                                 </el-button>
                                                 <el-button
-                                                    v-if="scope.row.status === 'DRAFT'"
+                                                    v-if="scope.row.status === 'DRAFT' && $root.hasButton('process:submit')"
                                                     type="text"
                                                     @click.stop="submitDraft(scope.row.id)">
                                                     提交
                                                 </el-button>
                                                 <el-button
+                                                    v-if="$root.hasButton('process:delete')"
                                                     type="text"
                                                     style="color: #f56c6c;"
                                                     @click.stop="handleDelete(scope.row.id)">
@@ -576,8 +578,14 @@ window.ProcessCenter = {
         actionButtons: function () {
             return this.resolveSortedButtons(this.selectedDetail);
         },
+        visibleActionButtons: function () {
+            var self = this;
+            return this.actionButtons.filter(function (button) {
+                return self.$root.hasButton("process:action:" + button.actionKey);
+            });
+        },
         primaryActionButton: function () {
-            return this.actionButtons.length ? this.actionButtons[0] : null;
+            return this.visibleActionButtons.length ? this.visibleActionButtons[0] : null;
         },
         orderedNodes: function () {
             return this.resolveOrderedNodes(this.selectedDetail);

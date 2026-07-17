@@ -12,7 +12,7 @@ window.TaskCenter = {
                         <div class="section-kicker">任务审批处理</div>
                         <h2>任务中心</h2>
                     </div>
-                    <el-button @click="refreshTasks">刷新</el-button>
+                    <el-button v-if="$root.hasButton('task:refresh')" @click="refreshTasks">刷新</el-button>
                 </div>
 
                 <div class="">
@@ -58,9 +58,9 @@ window.TaskCenter = {
                             <el-table-column label="操作" min-width="180" fixed="right">
                                 <template slot-scope="scope">
                                     <div class="table-operations">
-                                        <el-button type="text" @click.stop="openTaskDetail(scope.row)">查看</el-button>
-                                        <el-button type="text" @click.stop="openApproval(scope.row)">办理</el-button>
-                                        <el-button type="text" style="color: #f56c6c;" @click.stop="handleDelete(scope.row.taskId)">删除</el-button>
+                                        <el-button v-if="$root.hasButton('task:view')" type="text" @click.stop="openTaskDetail(scope.row)">查看</el-button>
+                                        <el-button v-if="$root.hasButton('task:approve')" type="text" @click.stop="openApproval(scope.row)">办理</el-button>
+                                        <el-button v-if="$root.hasButton('task:delete')" type="text" style="color: #f56c6c;" @click.stop="handleDelete(scope.row.taskId)">删除</el-button>
                                     </div>
                                 </template>
                             </el-table-column>
@@ -138,7 +138,7 @@ window.TaskCenter = {
                                 </el-radio-group>
                             </el-form-item>
                             <div class="form-actions">
-                                <el-button type="primary" @click="submitApproval">提交审批结果</el-button>
+                                <el-button v-if="$root.hasButton('task:approve')" type="primary" @click="submitApproval">提交审批结果</el-button>
                                 <el-button @click="approvalDialogVisible = false">取消</el-button>
                             </div>
                         </el-form>

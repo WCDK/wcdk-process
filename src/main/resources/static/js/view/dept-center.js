@@ -7,7 +7,7 @@ window.DeptCenter = {
     template: `
         <section class="route-section">
             <section class="workspace-panel route-panel">
-                <div class="panel-head"><div><div class="section-kicker">部门组织维护</div><h2>部门管理</h2></div><el-button v-if="$root.hasPermission('sys:dept:add')" type="primary" @click="openCreate">新增部门</el-button></div>
+                <div class="panel-head"><div><div class="section-kicker">部门组织维护</div><h2>部门管理</h2></div><el-button v-if="$root.hasButton('sys:dept:add')" type="primary" @click="openCreate">新增部门</el-button></div>
                 <el-form inline class="process-filter-form" @submit.native.prevent="queryList">
                     <el-form-item label="部门名称"><el-input v-model.trim="filters.deptName" placeholder="请输入部门名称"></el-input></el-form-item>
                     <el-form-item label="状态"><el-select v-model="filters.status" clearable placeholder="请选择状态"><el-option label="启用" :value="1"></el-option><el-option label="停用" :value="0"></el-option></el-select></el-form-item>
@@ -19,7 +19,7 @@ window.DeptCenter = {
                     <el-table-column prop="parentDeptName" label="上级部门" min-width="160"></el-table-column>
                     <el-table-column prop="sortNo" label="排序" width="100"></el-table-column>
                     <el-table-column prop="status" label="状态" width="100"><template slot-scope="scope"><el-tag :type="scope.row.status === 1 ? 'success' : 'info'">{{ scope.row.status === 1 ? '启用' : '停用' }}</el-tag></template></el-table-column>
-                    <el-table-column label="操作" min-width="180" fixed="right"><template slot-scope="scope"><div class="table-operations"><el-button v-if="$root.hasPermission('sys:dept:edit')" type="text" @click="openEdit(scope.row)">编辑</el-button><el-button v-if="$root.hasPermission('sys:dept:delete')" type="text" style="color:#f56c6c;" @click="handleDelete(scope.row)">删除</el-button></div></template></el-table-column>
+                    <el-table-column label="操作" min-width="180" fixed="right"><template slot-scope="scope"><div class="table-operations"><el-button v-if="$root.hasButton('sys:dept:edit')" type="text" @click="openEdit(scope.row)">编辑</el-button><el-button v-if="$root.hasButton('sys:dept:delete')" type="text" style="color:#f56c6c;" @click="handleDelete(scope.row)">删除</el-button></div></template></el-table-column>
                 </el-table>
                 <div class="process-pagination"><el-pagination background layout="total, sizes, prev, pager, next" :current-page="pageNum" :page-size="pageSize" :page-sizes="[10,20,50,100]" :total="total" @current-change="handlePageChange" @size-change="handleSizeChange"></el-pagination></div>
                 <el-dialog :title="editingId ? '编辑部门' : '新增部门'" :visible.sync="dialogVisible" width="720px" @closed="resetForm">

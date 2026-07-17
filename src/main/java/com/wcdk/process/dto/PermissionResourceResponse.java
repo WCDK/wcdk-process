@@ -1,13 +1,20 @@
 package com.wcdk.process.dto;
 
+import lombok.Builder;
 import lombok.Data;
+
+import java.util.List;
+
 /**
  * @auther WCDK
- * @date 2026/7/15
+ * @date 2026/7/17
  * @version 1.0
  **/
 @Data
-public class SysPermissionSaveRequest {
+@Builder
+public class PermissionResourceResponse {
+
+    private Long id;
 
     private Long parentId;
 
@@ -23,7 +30,7 @@ public class SysPermissionSaveRequest {
 
     private Integer sortNo;
 
-    private Integer status;
-
     private String remark;
+
+    private List<PermissionResourceResponse> children;
 }

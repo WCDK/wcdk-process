@@ -120,6 +120,7 @@ public class AuthServiceImpl implements AuthService {
                 .roleIds(authenticatedUser.getRoleIds())
                 .roleNames(authenticatedUser.getRoleNames())
                 .permissionCodes(authenticatedUser.getPermissionCodes())
+                .permissionResources(sysPermissionService.listPermissionResourcesByUserId(authenticatedUser.getUserId()))
                 .build();
     }
 

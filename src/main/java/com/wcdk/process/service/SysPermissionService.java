@@ -1,6 +1,7 @@
 package com.wcdk.process.service;
 
 import com.wcdk.process.common.PageResponse;
+import com.wcdk.process.dto.PermissionResourceResponse;
 import com.wcdk.process.dto.SysPermissionResponse;
 import com.wcdk.process.dto.SysPermissionSaveRequest;
 
@@ -32,4 +33,6 @@ public interface SysPermissionService {
     List<SysPermissionResponse> listByIds(List<Long> permissionIds);
 
     Set<String> listPermissionCodesByUserId(Long userId);
+
+    List<PermissionResourceResponse> listPermissionResourcesByUserId(Long userId);
 }

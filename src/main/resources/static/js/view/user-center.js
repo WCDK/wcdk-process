@@ -12,7 +12,7 @@ window.UserCenter = {
                         <div class="section-kicker">用户账号维护</div>
                         <h2>用户管理</h2>
                     </div>
-                    <el-button v-if="$root.hasPermission('sys:user:add')" type="primary" @click="openCreate">新增用户</el-button>
+                    <el-button v-if="$root.hasButton('sys:user:add')" type="primary" @click="openCreate">新增用户</el-button>
                 </div>
                 <el-form inline class="process-filter-form" @submit.native.prevent="queryList">
                     <el-form-item label="用户名"><el-input v-model.trim="filters.username" placeholder="请输入用户名"></el-input></el-form-item>
@@ -51,8 +51,8 @@ window.UserCenter = {
                     <el-table-column label="操作" min-width="180" fixed="right">
                         <template slot-scope="scope">
                             <div class="table-operations">
-                                <el-button v-if="$root.hasPermission('sys:user:edit')" type="text" @click="openEdit(scope.row)">编辑</el-button>
-                                <el-button v-if="$root.hasPermission('sys:user:delete')" type="text" style="color:#f56c6c;" @click="handleDelete(scope.row)">删除</el-button>
+                                <el-button v-if="$root.hasButton('sys:user:edit')" type="text" @click="openEdit(scope.row)">编辑</el-button>
+                                <el-button v-if="$root.hasButton('sys:user:delete')" type="text" style="color:#f56c6c;" @click="handleDelete(scope.row)">删除</el-button>
                             </div>
                         </template>
                     </el-table-column>

@@ -12,11 +12,11 @@ window.ModelCenter = {
                         <div class="section-kicker">流程模型管理</div>
                         <h2>模型中心</h2>
                     </div>
-                    <el-button @click="handleRefresh">刷新</el-button>
+                    <el-button v-if="$root.hasButton('model:refresh')" @click="handleRefresh">刷新</el-button>
                 </div>
 
                 <el-tabs v-model="activeTab" class="center-tabs">
-                    <el-tab-pane label="创建模型" name="create">
+                    <el-tab-pane v-if="$root.hasTab('model:tab:create')" label="创建模型" name="create">
                         <div >
                             <div>
                                 <el-form label-position="top" @submit.native.prevent="submitModel">
@@ -40,8 +40,8 @@ window.ModelCenter = {
                                         </el-input>
                                     </el-form-item>
                                     <div class="form-actions">
-                                        <el-button type="primary" @click="submitModel">{{ editingModelId ? "更新模型" : "创建模型" }}</el-button>
-                                        <el-button @click="handleDraftPreview">预览</el-button>
+                                        <el-button v-if="$root.hasButton(editingModelId ? 'model:edit' : 'model:create')" type="primary" @click="submitModel">{{ editingModelId ? "更新模型" : "创建模型" }}</el-button>
+                                        <el-button v-if="$root.hasButton('model:preview')" @click="handleDraftPreview">预览</el-button>
                                         <el-button @click="resetForm">{{ editingModelId ? "取消编辑" : "重置" }}</el-button>
                                     </div>
                                 </el-form>
@@ -49,7 +49,7 @@ window.ModelCenter = {
                         </div>
                     </el-tab-pane>
 
-                    <el-tab-pane label="模型列表" name="list">
+                    <el-tab-pane v-if="$root.hasTab('model:tab:list')" label="模型列表" name="list">
                         <div class="process-list-panel">
                             <el-form inline class="process-filter-form" @submit.native.prevent="handleQuery">
                                 <el-form-item label="模型名称">
@@ -101,10 +101,10 @@ window.ModelCenter = {
                                 <el-table-column label="操作" min-width="220" fixed="right">
                                     <template slot-scope="scope">
                                         <div class="table-operations">
-                                            <el-button type="text" @click.stop="handleEdit(scope.row)">修改</el-button>
-                                            <el-button type="text" @click.stop="handlePreview(scope.row)">预览</el-button>
-                                            <el-button type="text" @click.stop="handleDeploy(scope.row)">部署</el-button>
-                                            <el-button type="text" style="color: #f56c6c;" @click.stop="handleDelete(scope.row.modelId)">删除</el-button>
+                                            <el-button v-if="$root.hasButton('model:edit')" type="text" @click.stop="handleEdit(scope.row)">修改</el-button>
+                                            <el-button v-if="$root.hasButton('model:preview')" type="text" @click.stop="handlePreview(scope.row)">预览</el-button>
+                                            <el-button v-if="$root.hasButton('model:deploy')" type="text" @click.stop="handleDeploy(scope.row)">部署</el-button>
+                                            <el-button v-if="$root.hasButton('model:delete')" type="text" style="color: #f56c6c;" @click.stop="handleDelete(scope.row.modelId)">删除</el-button>
                                         </div>
                                     </template>
                                 </el-table-column>
@@ -167,7 +167,7 @@ window.ModelCenter = {
                     </el-form>
                     <span slot="footer" class="dialog-footer">
                         <el-button @click="deployDialogVisible = false">取消</el-button>
-                        <el-button type="primary" :loading="deploySaving" @click="submitDeploy">部署</el-button>
+                        <el-button v-if="$root.hasButton('model:deploy')" type="primary" :loading="deploySaving" @click="submitDeploy">部署</el-button>
                     </span>
                 </el-dialog>
 

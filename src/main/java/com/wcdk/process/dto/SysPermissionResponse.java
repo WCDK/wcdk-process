@@ -27,6 +27,8 @@ public class SysPermissionResponse {
 
     private String routePath;
 
+    private String icon;
+
     private Integer sortNo;
 
     private Integer status;

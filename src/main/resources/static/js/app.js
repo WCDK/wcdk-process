@@ -162,6 +162,25 @@ new Vue({
         },
         visibleNavMenus: function () {
             var self = this;
+            var resourceMenus = window.AppService.getPermissionResources("MENU", this.currentUser)
+                .filter(function (item) {
+                    return item.routePath && self.hasPermission(item.permissionCode);
+                })
+                .sort(function (left, right) {
+                    return Number(left.sortNo || 0) - Number(right.sortNo || 0);
+                })
+                .map(function (item) {
+                    return {
+                        path: item.routePath,
+                        label: item.permissionName,
+                        icon: item.icon || "el-icon-menu",
+                        description: item.remark || item.permissionName,
+                        permissionCode: item.permissionCode
+                    };
+                });
+            if (resourceMenus.length) {
+                return resourceMenus;
+            }
             return this.navMenus.filter(function (item) {
                 return self.hasPermission(item.permissionCode);
             });
@@ -188,6 +207,27 @@ new Vue({
         hasPermission: function (permissionCode) {
             return window.AppService.hasPermission(permissionCode, this.currentUser);
         },
+        hasResource: function (permissionCode, permissionType) {
+            return window.AppService.hasResource(permissionCode, permissionType, this.currentUser);
+        },
+        hasButton: function (permissionCode) {
+            return this.hasResource(permissionCode, "BUTTON");
+        },
+        hasTab: function (permissionCode) {
+            return this.hasResource(permissionCode, "TAB");
+        },
+        hasTag: function (permissionCode) {
+            return this.hasResource(permissionCode, "TAG");
+        },
+        resolveFirstVisibleMenuPath: function () {
+            return this.visibleNavMenus.length ? this.visibleNavMenus[0].path : "";
+        },
+        redirectToFirstVisibleMenu: function () {
+            var path = this.resolveFirstVisibleMenuPath();
+            if (path && this.$route.path !== path) {
+                this.$router.replace(path);
+            }
+        },
         handleLoginSuccess: async function (loginResult) {
             window.AppService.setToken(loginResult.token);
             window.AppService.setCurrentUserCache(loginResult.currentUser);
@@ -195,7 +235,7 @@ new Vue({
             await this.loadBaseOptions();
             await this.reloadAll();
             this.authReady = true;
-            this.$router.push("/home");
+            this.redirectToFirstVisibleMenu();
         },
         logout: async function () {
             try {
@@ -225,7 +265,10 @@ new Vue({
                 await this.reloadAll();
                 this.authReady = true;
                 if (this.isLoginRoute) {
-                    this.$router.replace("/home");
+                    this.redirectToFirstVisibleMenu();
+                }
+                if (!this.isLoginRoute && !this.hasPermission(this.$route.meta && this.$route.meta.permissionCode)) {
+                    this.redirectToFirstVisibleMenu();
                 }
             } catch (error) {
                 window.AppService.clearAuth();
