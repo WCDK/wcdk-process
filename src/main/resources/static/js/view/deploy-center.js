@@ -164,6 +164,7 @@ window.DeployCenter = {
                                         <el-button type="text" @click.stop="handleEdit(scope.row)">编辑</el-button>
                                         <el-button type="text" @click.stop="handleView(scope.row)">查看</el-button>
                                         <el-button type="text" @click.stop="handlePreview(scope.row)">预览</el-button>
+                                        <el-button type="text" @click.stop="handleBindingEdit(scope.row)">修改绑定</el-button>
                                         <el-button type="text" @click.stop="handleDelete(scope.row.deploymentId)">删除</el-button>
                                     </template>
                                 </el-table-column>
@@ -230,6 +231,50 @@ window.DeployCenter = {
                     <div v-else class="empty-panel center-empty-panel">
                         未查询到部署详情。
                     </div>
+                </el-dialog>
+                <el-dialog
+                    title="修改绑定"
+                    :visible.sync="bindingDialogVisible"
+                    width="520px"
+                    @close="resetBindingForm">
+                    <el-form label-position="top" @submit.native.prevent="submitBinding">
+                        <el-form-item label="流程部署">
+                            <el-input :value="bindingForm.deploymentName || '-'" disabled></el-input>
+                        </el-form-item>
+                        <el-form-item label="客户端">
+                            <el-select
+                                v-model="bindingForm.clientId"
+                                clearable
+                                filterable
+                                placeholder="请选择客户端">
+                                <el-option
+                                    v-for="client in clientOptions"
+                                    :key="'binding-client-' + client.clientId"
+                                    :label="formatClientOptionLabel(client)"
+                                    :value="client.clientId">
+                                </el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="processName">
+                            <el-select
+                                v-model="bindingForm.processBeanName"
+                                clearable
+                                filterable
+                                :loading="bindingProcessBeanLoading"
+                                placeholder="请选择processName">
+                                <el-option
+                                    v-for="processBeanName in bindingProcessBeanOptions"
+                                    :key="'binding-process-' + processBeanName"
+                                    :label="processBeanName"
+                                    :value="processBeanName">
+                                </el-option>
+                            </el-select>
+                        </el-form-item>
+                    </el-form>
+                    <span slot="footer" class="dialog-footer">
+                        <el-button @click="bindingDialogVisible = false">取消</el-button>
+                        <el-button type="primary" :loading="bindingSaving" @click="submitBinding">保存</el-button>
+                    </span>
                 </el-dialog>
                 <el-dialog
                     title="流程图预览"
@@ -342,6 +387,16 @@ window.DeployCenter = {
             sortOrder: "descending",
             selectedDeploymentId: "",
             detailDialogVisible: false,
+            bindingDialogVisible: false,
+            bindingSaving: false,
+            bindingProcessBeanLoading: false,
+            bindingProcessBeanOptions: [],
+            bindingForm: {
+                deploymentId: "",
+                deploymentName: "",
+                clientId: "",
+                processBeanName: ""
+            },
             previewDialogVisible: false,
             previewDetail: null,
             previewDeploymentId: "",
@@ -476,6 +531,92 @@ window.DeployCenter = {
             }
             if (this.processBeanOptions.indexOf(this.form.processBeanName) < 0) {
                 this.form.processBeanName = "";
+            }
+        },
+        handleBindingEdit: async function (row) {
+            if (!row || !row.deploymentId) {
+                this.$root.showError("未查询到部署信息");
+                return;
+            }
+            this.bindingForm.deploymentId = row.deploymentId;
+            this.bindingForm.deploymentName = row.deploymentName || row.deploymentId;
+            this.bindingForm.clientId = Array.isArray(row.clientIds) && row.clientIds.length ? row.clientIds[0] : "";
+            this.bindingForm.processBeanName = Array.isArray(row.processBeanNames) && row.processBeanNames.length ? row.processBeanNames[0] : "";
+            this.bindingDialogVisible = true;
+            if (!this.clientOptions.length) {
+                await this.loadClientOptions();
+            }
+            await this.loadBindingProcessBeanOptionsByClient();
+            this.syncBindingProcessBeanByClient();
+        },
+        loadBindingProcessBeanOptionsByClient: async function () {
+            var clientId = (this.bindingForm.clientId || "").trim();
+            this.bindingProcessBeanOptions = [];
+            if (!clientId) {
+                this.bindingForm.processBeanName = "";
+                return;
+            }
+            this.bindingProcessBeanLoading = true;
+            try {
+                var result = await window.AppService.request("/flowable/deploy/client/" + encodeURIComponent(clientId) + "/process-bean/list");
+                if ((this.bindingForm.clientId || "").trim() !== clientId) {
+                    return;
+                }
+                this.bindingProcessBeanOptions = Array.isArray(result.data) ? result.data : [];
+            } catch (error) {
+                if ((this.bindingForm.clientId || "").trim() !== clientId) {
+                    return;
+                }
+                this.bindingProcessBeanOptions = [];
+                this.$root.showError(error.message || "加载processName失败");
+            } finally {
+                if ((this.bindingForm.clientId || "").trim() === clientId) {
+                    this.bindingProcessBeanLoading = false;
+                }
+            }
+        },
+        syncBindingProcessBeanByClient: function () {
+            if (!this.bindingForm.processBeanName) {
+                return;
+            }
+            if (this.bindingProcessBeanOptions.indexOf(this.bindingForm.processBeanName) < 0) {
+                this.bindingForm.processBeanName = "";
+            }
+        },
+        resetBindingForm: function () {
+            this.bindingSaving = false;
+            this.bindingProcessBeanLoading = false;
+            this.bindingProcessBeanOptions = [];
+            this.bindingForm.deploymentId = "";
+            this.bindingForm.deploymentName = "";
+            this.bindingForm.clientId = "";
+            this.bindingForm.processBeanName = "";
+        },
+        submitBinding: async function () {
+            if (!this.bindingForm.deploymentId) {
+                this.$root.showError("未查询到部署信息");
+                return;
+            }
+            if (!this.bindingForm.clientId) {
+                this.$root.showError("请选择客户端");
+                return;
+            }
+            if (!this.bindingForm.processBeanName) {
+                this.$root.showError("请选择processName");
+                return;
+            }
+            this.bindingSaving = true;
+            try {
+                await this.$root.updateDeploymentBinding(this.bindingForm.deploymentId, {
+                    clientId: this.bindingForm.clientId,
+                    processBeanName: this.bindingForm.processBeanName
+                });
+                this.bindingDialogVisible = false;
+                this.selectFirstFromFiltered();
+            } catch (error) {
+                this.$root.showError(error.message || "修改绑定失败");
+            } finally {
+                this.bindingSaving = false;
             }
         },
         resolveDefinitionLabel: function (definition) {
@@ -981,6 +1122,12 @@ window.DeployCenter = {
         },
         "form.clientId": function () {
             this.handleClientChange();
+        },
+        "bindingForm.clientId": function () {
+            var self = this;
+            this.loadBindingProcessBeanOptionsByClient().then(function () {
+                self.syncBindingProcessBeanByClient();
+            });
         }
     }
 };

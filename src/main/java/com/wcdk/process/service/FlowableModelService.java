@@ -22,7 +22,7 @@ public interface FlowableModelService {
 
     String getModelXml(String modelId);
 
-    DeploymentResponse deployModel(String modelId, String processBeanName);
+    DeploymentResponse deployModel(String modelId, String clientId, String processBeanName);
 
     void deleteModel(String modelId);
 }

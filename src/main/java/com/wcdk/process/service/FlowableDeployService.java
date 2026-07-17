@@ -22,5 +22,7 @@ public interface FlowableDeployService {
 
     ProcessDefinitionDetailResponse getProcessDefinitionDetail(String processDefinitionId);
 
+    void updateDeploymentBinding(String deploymentId, String clientId, String processBeanName);
+
     void deleteDeployment(String deploymentId, Boolean cascade);
 }

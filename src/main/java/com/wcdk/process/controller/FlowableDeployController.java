@@ -2,6 +2,7 @@ package com.wcdk.process.controller;
 
 import com.wcdk.process.common.ApiResponse;
 import com.wcdk.process.common.PageResponse;
+import com.wcdk.process.dto.DeploymentBindingUpdateRequest;
 import com.wcdk.process.dto.DeploymentResponse;
 import com.wcdk.process.dto.ProcessDefinitionDetailResponse;
 import com.wcdk.process.dto.ProcessDefinitionResponse;
@@ -15,6 +16,8 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -85,6 +88,17 @@ public class FlowableDeployController {
     @Operation(summary = "查询流程定义详情", description = "根据流程定义编号查询流程定义详情与流程图结构")
     public ApiResponse<ProcessDefinitionDetailResponse> getProcessDefinitionDetail(@PathVariable String processDefinitionId) {
         return ApiResponse.success(flowableDeployService.getProcessDefinitionDetail(processDefinitionId));
+    }
+
+    @PutMapping("/{deploymentId}/binding")
+    @Operation(summary = "修改部署绑定", description = "修改流程部署绑定的客户端与流程处理器")
+    public ApiResponse<Void> updateDeploymentBinding(@PathVariable String deploymentId,
+                                                     @RequestBody DeploymentBindingUpdateRequest request) {
+        flowableDeployService.updateDeploymentBinding(
+                deploymentId,
+                request == null ? null : request.getClientId(),
+                request == null ? null : request.getProcessBeanName());
+        return ApiResponse.success("修改绑定成功", null);
     }
 
     @DeleteMapping

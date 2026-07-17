@@ -100,9 +100,11 @@ public class FlowableModelServiceImpl implements FlowableModelService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public DeploymentResponse deployModel(String modelId, String processBeanName) {
+    public DeploymentResponse deployModel(String modelId, String clientId, String processBeanName) {
         Model model = getRequiredModel(modelId);
-        String validProcessBeanName = validateProcessBeanName(processBeanName);
+        String validClientId = normalizeOptionalValue(clientId);
+        String validProcessBeanName = normalizeOptionalValue(processBeanName);
+        validateDeployBinding(validClientId, validProcessBeanName);
         byte[] source = repositoryService.getModelEditorSource(modelId);
         if (source == null || source.length == 0) {
             throw new IllegalArgumentException("模型尚未保存 BPMN XML 内容，无法部署");
@@ -113,13 +115,16 @@ public class FlowableModelServiceImpl implements FlowableModelService {
                 .category(model.getCategory())
                 .addString(resourceName, new String(source, StandardCharsets.UTF_8))
                 .deploy();
-        repositoryService.createProcessDefinitionQuery()
-                .deploymentId(deployment.getId())
-                .list()
-                .forEach(processDefinition -> wcdkProcessClientRegistryService.bindProcessDefinition(
-                        processDefinition.getId(),
-                        validProcessBeanName,
-                        processDefinition.getName()));
+        if (StringUtils.hasText(validClientId) && StringUtils.hasText(validProcessBeanName)) {
+            repositoryService.createProcessDefinitionQuery()
+                    .deploymentId(deployment.getId())
+                    .list()
+                    .forEach(processDefinition -> wcdkProcessClientRegistryService.bindProcessDefinition(
+                            validClientId,
+                            processDefinition.getId(),
+                            validProcessBeanName,
+                            processDefinition.getName()));
+        }
         model.setDeploymentId(deployment.getId());
         model.setMetaInfo(buildMetaInfo(model.getName(), model.getKey(), model.getCategory(), validProcessBeanName));
         repositoryService.saveModel(model);
@@ -158,6 +163,26 @@ public class FlowableModelServiceImpl implements FlowableModelService {
             throw new IllegalArgumentException("部署流程模型时必须指定processBean");
         }
         return processBeanName.trim();
+    }
+
+    private String normalizeOptionalValue(String value) {
+        return StringUtils.hasText(value) ? value.trim() : null;
+    }
+
+    private void validateDeployBinding(String clientId, String processBeanName) {
+        if (!StringUtils.hasText(clientId) && !StringUtils.hasText(processBeanName)) {
+            return;
+        }
+        if (!StringUtils.hasText(clientId)) {
+            throw new IllegalArgumentException("选择processName时必须选择客户端");
+        }
+        if (!StringUtils.hasText(processBeanName)) {
+            throw new IllegalArgumentException("选择客户端时必须选择processName");
+        }
+        List<String> processBeanNames = wcdkProcessClientRegistryService.listProcessBeanNameByClientId(clientId);
+        if (!processBeanNames.contains(processBeanName)) {
+            throw new IllegalArgumentException("当前客户端未注册该processName");
+        }
     }
 
     private boolean matchesModelName(ModelResponse model, String modelName) {
@@ -237,4 +262,3 @@ public class FlowableModelServiceImpl implements FlowableModelService {
                 .build();
     }
 }
-

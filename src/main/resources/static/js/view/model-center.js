@@ -103,7 +103,7 @@ window.ModelCenter = {
                                         <div class="table-operations">
                                             <el-button type="text" @click.stop="handleEdit(scope.row)">修改</el-button>
                                             <el-button type="text" @click.stop="handlePreview(scope.row)">预览</el-button>
-                                            <el-button type="text" @click.stop="handleDeploy(scope.row.modelId)">部署</el-button>
+                                            <el-button type="text" @click.stop="handleDeploy(scope.row)">部署</el-button>
                                             <el-button type="text" style="color: #f56c6c;" @click.stop="handleDelete(scope.row.modelId)">删除</el-button>
                                         </div>
                                     </template>
@@ -125,6 +125,51 @@ window.ModelCenter = {
                         </div>
                     </el-tab-pane>
                 </el-tabs>
+
+                <el-dialog
+                    title="部署模型"
+                    :visible.sync="deployDialogVisible"
+                    width="520px"
+                    @close="resetDeployForm">
+                    <el-form label-position="top" @submit.native.prevent="submitDeploy">
+                        <el-form-item label="模型名称">
+                            <el-input :value="deployForm.modelName || '-'" disabled></el-input>
+                        </el-form-item>
+                        <el-form-item label="客户端">
+                            <el-select
+                                v-model="deployForm.clientId"
+                                clearable
+                                filterable
+                                placeholder="请选择客户端">
+                                <el-option
+                                    v-for="client in clientOptions"
+                                    :key="'model-deploy-client-' + client.clientId"
+                                    :label="formatClientOptionLabel(client)"
+                                    :value="client.clientId">
+                                </el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="processName">
+                            <el-select
+                                v-model="deployForm.processBeanName"
+                                clearable
+                                filterable
+                                :loading="deployProcessBeanLoading"
+                                placeholder="请选择processName">
+                                <el-option
+                                    v-for="processBeanName in deployProcessBeanOptions"
+                                    :key="'model-deploy-process-' + processBeanName"
+                                    :label="processBeanName"
+                                    :value="processBeanName">
+                                </el-option>
+                            </el-select>
+                        </el-form-item>
+                    </el-form>
+                    <span slot="footer" class="dialog-footer">
+                        <el-button @click="deployDialogVisible = false">取消</el-button>
+                        <el-button type="primary" :loading="deploySaving" @click="submitDeploy">部署</el-button>
+                    </span>
+                </el-dialog>
 
                 <el-dialog
                     title="模型流程图预览"
@@ -222,6 +267,17 @@ window.ModelCenter = {
             sortOrder: "descending",
             editingModelId: "",
             selectedModelId: "",
+            clientOptions: [],
+            deployDialogVisible: false,
+            deploySaving: false,
+            deployProcessBeanLoading: false,
+            deployProcessBeanOptions: [],
+            deployForm: {
+                modelId: "",
+                modelName: "",
+                clientId: "",
+                processBeanName: ""
+            },
             previewDialogVisible: false,
             previewDetail: null
         };
@@ -362,12 +418,107 @@ window.ModelCenter = {
                 this.$root.showError(error.message || "模型流程图预览失败");
             }
         },
-        handleDeploy: async function (modelId) {
+        handleDeploy: async function (model) {
             try {
-                await this.$root.deployModel(modelId);
-                this.selectCurrentOrFirst(modelId);
+                if (!model || !model.modelId) {
+                    this.$root.showError("未查询到模型信息");
+                    return;
+                }
+                this.deployForm.modelId = model.modelId;
+                this.deployForm.modelName = model.modelName || model.modelId;
+                this.deployForm.clientId = "";
+                this.deployForm.processBeanName = "";
+                this.deployProcessBeanOptions = [];
+                this.deployDialogVisible = true;
+                if (!this.clientOptions.length) {
+                    await this.loadClientOptions();
+                }
             } catch (error) {
                 this.$root.showError(error.message || "模型部署失败");
+            }
+        },
+        loadClientOptions: async function () {
+            try {
+                var result = await window.AppService.request("/flowable/deploy/client/list?pageNum=1&pageSize=500");
+                var pageData = result.data || {};
+                this.clientOptions = Array.isArray(pageData.records) ? pageData.records : [];
+            } catch (error) {
+                this.clientOptions = [];
+                this.$root.showError(error.message || "加载客户端列表失败");
+            }
+        },
+        formatClientOptionLabel: function (client) {
+            if (!client) {
+                return "";
+            }
+            return client.clientName ? client.clientId + " (" + client.clientName + ")" : client.clientId;
+        },
+        loadDeployProcessBeanOptionsByClient: async function () {
+            var clientId = (this.deployForm.clientId || "").trim();
+            this.deployProcessBeanOptions = [];
+            if (!clientId) {
+                this.deployForm.processBeanName = "";
+                return;
+            }
+            this.deployProcessBeanLoading = true;
+            try {
+                var result = await window.AppService.request("/flowable/deploy/client/" + encodeURIComponent(clientId) + "/process-bean/list");
+                if ((this.deployForm.clientId || "").trim() !== clientId) {
+                    return;
+                }
+                this.deployProcessBeanOptions = Array.isArray(result.data) ? result.data : [];
+            } catch (error) {
+                if ((this.deployForm.clientId || "").trim() !== clientId) {
+                    return;
+                }
+                this.deployProcessBeanOptions = [];
+                this.$root.showError(error.message || "加载processName失败");
+            } finally {
+                if ((this.deployForm.clientId || "").trim() === clientId) {
+                    this.deployProcessBeanLoading = false;
+                }
+            }
+        },
+        syncDeployProcessBeanByClient: function () {
+            if (!this.deployForm.processBeanName) {
+                return;
+            }
+            if (this.deployProcessBeanOptions.indexOf(this.deployForm.processBeanName) < 0) {
+                this.deployForm.processBeanName = "";
+            }
+        },
+        resetDeployForm: function () {
+            this.deploySaving = false;
+            this.deployProcessBeanLoading = false;
+            this.deployProcessBeanOptions = [];
+            this.deployForm.modelId = "";
+            this.deployForm.modelName = "";
+            this.deployForm.clientId = "";
+            this.deployForm.processBeanName = "";
+        },
+        submitDeploy: async function () {
+            if (!this.deployForm.modelId) {
+                this.$root.showError("未查询到模型信息");
+                return;
+            }
+            if ((this.deployForm.clientId && !this.deployForm.processBeanName)
+                || (!this.deployForm.clientId && this.deployForm.processBeanName)) {
+                this.$root.showError("客户端与processName需要同时选择，或都不选择");
+                return;
+            }
+            this.deploySaving = true;
+            try {
+                await this.$root.deployModel(this.deployForm.modelId, {
+                    clientId: this.deployForm.clientId,
+                    processBeanName: this.deployForm.processBeanName
+                });
+                var deployedModelId = this.deployForm.modelId;
+                this.deployDialogVisible = false;
+                this.selectCurrentOrFirst(deployedModelId);
+            } catch (error) {
+                this.$root.showError(error.message || "模型部署失败");
+            } finally {
+                this.deploySaving = false;
             }
         },
         handleDelete: function (modelId) {
@@ -661,6 +812,12 @@ window.ModelCenter = {
             if (!this.selectedModel) {
                 this.selectFirstModel();
             }
+        },
+        "deployForm.clientId": function () {
+            var self = this;
+            this.loadDeployProcessBeanOptionsByClient().then(function () {
+                self.syncDeployProcessBeanByClient();
+            });
         }
     }
 };

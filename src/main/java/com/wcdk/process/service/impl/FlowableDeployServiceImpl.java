@@ -228,6 +228,36 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
     }
 
     @Override
+    public void updateDeploymentBinding(String deploymentId, String clientId, String processBeanName) {
+        if (!StringUtils.hasText(deploymentId)) {
+            throw new IllegalArgumentException("部署ID不能为空");
+        }
+        String validClientId = normalizeRequiredValue(clientId, "客户端不能为空");
+        String validProcessBeanName = normalizeRequiredValue(processBeanName, "流程处理器不能为空");
+        Deployment deployment = repositoryService.createDeploymentQuery()
+                .deploymentId(deploymentId.trim())
+                .singleResult();
+        if (deployment == null) {
+            throw new IllegalArgumentException("未查询到对应部署，部署ID：" + deploymentId);
+        }
+        List<String> processBeanNames = wcdkProcessClientRegistryService.listProcessBeanNameByClientId(validClientId);
+        if (!processBeanNames.contains(validProcessBeanName)) {
+            throw new IllegalArgumentException("当前客户端未注册该流程处理器");
+        }
+        List<ProcessDefinition> processDefinitions = repositoryService.createProcessDefinitionQuery()
+                .deploymentId(deployment.getId())
+                .list();
+        if (processDefinitions.isEmpty()) {
+            throw new IllegalArgumentException("当前部署未关联流程定义");
+        }
+        processDefinitions.forEach(processDefinition -> wcdkProcessClientRegistryService.bindProcessDefinition(
+                validClientId,
+                processDefinition.getId(),
+                validProcessBeanName,
+                processDefinition.getName()));
+    }
+
+    @Override
     public void deleteDeployment(String deploymentId, Boolean cascade) {
         if (!StringUtils.hasText(deploymentId)) {
             throw new IllegalArgumentException("部署ID不能为空");
@@ -285,6 +315,13 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
 
     private String normalizeOptionalValue(String value) {
         return StringUtils.hasText(value) ? value.trim() : null;
+    }
+
+    private String normalizeRequiredValue(String value, String message) {
+        if (!StringUtils.hasText(value)) {
+            throw new IllegalArgumentException(message);
+        }
+        return value.trim();
     }
 
     private void bindDeploymentProcessDefinitions(String deploymentId, String clientId, String processBeanName) {

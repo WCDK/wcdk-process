@@ -66,3 +66,10 @@ mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+wcdk:
+  process:
+    swagger:
+      description: 流程引擎 服务接口文档
+      title: 流程引擎接口文档
+      version: 1.0
+    strict-mode: true

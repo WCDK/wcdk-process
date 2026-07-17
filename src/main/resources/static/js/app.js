@@ -393,6 +393,14 @@ new Vue({
             this.showSuccess(result.message || "部署删除成功");
             await Promise.all([this.loadDeployments(), this.loadDefinitions(), this.loadProcesses(), this.loadTasks(this.taskAssignee)]);
         },
+        updateDeploymentBinding: async function (deploymentId, payload) {
+            var result = await window.AppService.requestJson("/flowable/deploy/" + encodeURIComponent(deploymentId) + "/binding", {
+                method: "PUT",
+                body: JSON.stringify(payload || {})
+            });
+            this.showSuccess(result.message || "修改绑定成功");
+            await Promise.all([this.loadDeployments(), this.loadDefinitions()]);
+        },
         createModel: async function (payload) {
             var result = await window.AppService.requestJson("/flowable/model", { method: "POST", body: JSON.stringify(payload) });
             this.showSuccess(result.message || "模型创建成功");
@@ -408,8 +416,16 @@ new Vue({
             this.showSuccess(result.message || "模型删除成功");
             await this.loadModels();
         },
-        deployModel: async function (modelId) {
-            var result = await window.AppService.requestJson("/flowable/model/" + encodeURIComponent(modelId) + "/deploy", { method: "POST" });
+        deployModel: async function (modelId, payload) {
+            var nextPayload = payload || {};
+            var query = "";
+            if (nextPayload.clientId) {
+                query += (query ? "&" : "?") + "clientId=" + encodeURIComponent(nextPayload.clientId);
+            }
+            if (nextPayload.processBeanName) {
+                query += (query ? "&" : "?") + "processBeanName=" + encodeURIComponent(nextPayload.processBeanName);
+            }
+            var result = await window.AppService.requestJson("/flowable/model/" + encodeURIComponent(modelId) + "/deploy" + query, { method: "POST" });
             this.showSuccess(result.message || "模型部署成功");
             await Promise.all([this.loadModels(), this.loadDeployments(), this.loadDefinitions()]);
         },

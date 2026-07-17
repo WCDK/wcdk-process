@@ -64,8 +64,9 @@ public class FlowableModelController {
     @PostMapping("/{modelId}/deploy")
     @Operation(summary = "部署流程模型", description = "根据模型编号将流程模型部署为可执行流程定义，并绑定 processBean")
     public ApiResponse<DeploymentResponse> deployModel(@PathVariable String modelId,
-                                                       @RequestParam String processBeanName) {
-        return ApiResponse.success("流程模型部署成功", flowableModelService.deployModel(modelId, processBeanName));
+                                                       @RequestParam(required = false) String clientId,
+                                                       @RequestParam(required = false) String processBeanName) {
+        return ApiResponse.success("流程模型部署成功", flowableModelService.deployModel(modelId, clientId, processBeanName));
     }
 
     @DeleteMapping("/{modelId}")
