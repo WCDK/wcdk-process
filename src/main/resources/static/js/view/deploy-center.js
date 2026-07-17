@@ -160,6 +160,7 @@ window.DeployCenter = {
                                 </el-table-column>
                                 <el-table-column label="操作" min-width="160" fixed="right">
                                     <template slot-scope="scope">
+                                        <el-button type="text" @click.stop="handleStartApproval(scope.row)">发起审批</el-button>
                                         <el-button type="text" @click.stop="handleEdit(scope.row)">编辑</el-button>
                                         <el-button type="text" @click.stop="handleView(scope.row)">查看</el-button>
                                         <el-button type="text" @click.stop="handlePreview(scope.row)">预览</el-button>
@@ -562,15 +563,15 @@ window.DeployCenter = {
                 this.resetForm();
                 this.selectFirstDeployment();
             } catch (error) {
-                this.$root.showError(error.message || "Deployment failed");
+                this.$root.showError(error.message || "部署失败");
             }
         },
         handleDelete: function (deploymentId) {
             var self = this;
-            this.$confirm("Deleting this deployment will also remove related process definitions and runtime data. Continue?", "Delete Deployment", {
+            this.$confirm("删除此部署也将删除相关的流程定义和运行时数据，是否继续删除？", "删除部署", {
                 type: "warning",
-                confirmButtonText: "Delete",
-                cancelButtonText: "Cancel"
+                confirmButtonText: "删除",
+                cancelButtonText: "取消"
             }).then(async function () {
                 await self.$root.deleteDeployment(deploymentId);
                 if (self.selectedDeploymentId === deploymentId) {
@@ -578,6 +579,28 @@ window.DeployCenter = {
                 }
                 self.selectFirstDeployment();
             }).catch(function () {});
+        },
+        handleStartApproval: function (row) {
+            var targetDefinition = this.resolveLatestDefinition(row);
+            if (!targetDefinition || !targetDefinition.processDefinitionKey) {
+                this.$root.showError("未查询到可发起的流程定义");
+                return;
+            }
+            this.$router.push({
+                path: "/process",
+                query: {
+                    processDefinitionId: targetDefinition.processDefinitionId
+                }
+            });
+        },
+        resolveLatestDefinition: function (row) {
+            var definitions = this.findDefinitionsByDeploymentId(row && row.deploymentId ? row.deploymentId : "");
+            if (!definitions.length) {
+                return null;
+            }
+            return definitions.slice().sort(function (left, right) {
+                return Number(right.version || 0) - Number(left.version || 0);
+            })[0];
         },
         handleRefresh: async function () {
             await Promise.all([
@@ -589,7 +612,10 @@ window.DeployCenter = {
         },
         handleQuery: async function () {
             this.pageNum = 1;
-            await this.$root.loadDeployments(this.filters);
+            await Promise.all([
+                this.$root.loadDeployments(this.filters),
+                this.$root.loadDefinitions()
+            ]);
             this.selectFirstFromFiltered();
         },
         handleResetQuery: async function () {
@@ -599,7 +625,10 @@ window.DeployCenter = {
             this.pageNum = 1;
             this.sortProp = "deployTime";
             this.sortOrder = "descending";
-            await this.$root.loadDeployments(this.filters);
+            await Promise.all([
+                this.$root.loadDeployments(this.filters),
+                this.$root.loadDefinitions()
+            ]);
             this.selectFirstDeployment();
         },
         handlePageChange: function (pageNum) {

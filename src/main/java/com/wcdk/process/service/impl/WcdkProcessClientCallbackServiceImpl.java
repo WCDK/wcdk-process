@@ -54,7 +54,7 @@ public class WcdkProcessClientCallbackServiceImpl implements WcdkProcessClientCa
         for (WcdkProcessClientDefinition clientDefinition : clientDefinitions) {
             try {
                 restClient.post()
-                        .uri(clientDefinition.getCallbackUrl())
+                        .uri(clientDefinition.getCallbackUrl()+"/wcdk_process/"+event.getProcessBeanName())
                         .contentType(MediaType.APPLICATION_JSON)
                         .headers(headers -> applyHeaders(headers, clientDefinition))
                         .body(fillClientInfo(event, clientDefinition))
@@ -141,6 +141,11 @@ public class WcdkProcessClientCallbackServiceImpl implements WcdkProcessClientCa
     }
 
     private WcdkProcessConnectionEvent fillClientInfo(WcdkProcessConnectionEvent source, WcdkProcessClientDefinition clientDefinition) {
+        String processBeanName = resolveProcessBeanName(source, clientDefinition);
+        Map<String, Object> payload = source.getPayload() == null ? new LinkedHashMap<>() : new LinkedHashMap<>(source.getPayload());
+        if (StringUtils.hasText(processBeanName)) {
+            payload.put("processBeanName", processBeanName);
+        }
         return WcdkProcessConnectionEvent.builder()
                 .connectionId(source.getConnectionId())
                 .clientId(clientDefinition.getClientId())
@@ -149,13 +154,27 @@ public class WcdkProcessClientCallbackServiceImpl implements WcdkProcessClientCa
                 .processDefinitionId(source.getProcessDefinitionId())
                 .processDefinitionKey(source.getProcessDefinitionKey())
                 .businessKey(source.getBusinessKey())
-                .processBeanName(source.getProcessBeanName())
+                .processBeanName(processBeanName)
                 .eventType(source.getEventType())
                 .message(source.getMessage())
                 .eventTime(source.getEventTime() == null ? LocalDateTime.now() : source.getEventTime())
-                .payload(source.getPayload())
+                .payload(payload)
                 .errorMessage(source.getErrorMessage())
                 .build();
     }
-}
 
+    private String resolveProcessBeanName(WcdkProcessConnectionEvent source, WcdkProcessClientDefinition clientDefinition) {
+        if (source != null && StringUtils.hasText(source.getProcessBeanName())) {
+            return source.getProcessBeanName().trim();
+        }
+        if (clientDefinition.getProcessBeanNames() == null || clientDefinition.getProcessBeanNames().isEmpty()) {
+            return null;
+        }
+        return clientDefinition.getProcessBeanNames()
+                .stream()
+                .filter(StringUtils::hasText)
+                .findFirst()
+                .map(String::trim)
+                .orElse(null);
+    }
+}

@@ -197,10 +197,17 @@ public class WcdkProcessClientRegistryServiceImpl implements WcdkProcessClientRe
         if (clientIds.isEmpty()) {
             return List.of();
         }
+        Map<String, Set<String>> processBeanMap = clientProcesses.stream()
+                .filter(item -> StringUtils.hasText(item.getClientId()))
+                .filter(item -> StringUtils.hasText(item.getProcessBeanName()))
+                .collect(Collectors.groupingBy(
+                        item -> item.getClientId().trim(),
+                        Collectors.mapping(item -> item.getProcessBeanName().trim(), Collectors.toCollection(LinkedHashSet::new))
+                ));
         List<WcdkProcessClient> clients = wcdkProcessClientMapper.selectList(new LambdaQueryWrapper<WcdkProcessClient>()
                 .in(WcdkProcessClient::getClientId, clientIds));
         return clients.stream()
-                .map(this::buildClientDefinition)
+                .map(client -> buildClientDefinition(client, processBeanMap.getOrDefault(client.getClientId(), Set.of())))
                 .toList();
     }
 
@@ -323,11 +330,16 @@ public class WcdkProcessClientRegistryServiceImpl implements WcdkProcessClientRe
     }
 
     private WcdkProcessClientDefinition buildClientDefinition(WcdkProcessClient client) {
+        return buildClientDefinition(client, Set.of());
+    }
+
+    private WcdkProcessClientDefinition buildClientDefinition(WcdkProcessClient client, Set<String> processBeanNames) {
         return WcdkProcessClientDefinition.builder()
                 .clientId(client.getClientId())
                 .clientName(client.getClientName())
                 .callbackUrl(client.getCallbackUrl())
                 .callbackHeaders(readHeaders(client.getAuthFlg()))
+                .processBeanNames(processBeanNames == null ? Set.of() : processBeanNames)
                 .build();
     }
 

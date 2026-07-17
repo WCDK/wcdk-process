@@ -2,6 +2,7 @@ package com.wcdk.process.service.impl;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.TypeReference;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.wcdk.process.common.PageResponse;
@@ -12,7 +13,9 @@ import com.wcdk.process.dto.ProcessRequestCreateRequest;
 import com.wcdk.process.dto.ProcessRequestResponse;
 import com.wcdk.process.dto.WcdkProcessConnectionEvent;
 import com.wcdk.process.entity.ProcessRequest;
+import com.wcdk.process.entity.WcdkProcessClientProcess;
 import com.wcdk.process.mapper.ProcessRequestMapper;
+import com.wcdk.process.mapper.WcdkProcessClientProcessMapper;
 import com.wcdk.process.service.FlowableDeployService;
 import com.wcdk.process.service.ProcessRequestService;
 import com.wcdk.process.service.WcdkProcessClientCallbackService;
@@ -68,18 +71,22 @@ public class ProcessRequestServiceImpl extends ServiceImpl<ProcessRequestMapper,
 
     private final WcdkProcessClientCallbackService wcdkProcessClientCallbackService;
 
+    private final WcdkProcessClientProcessMapper wcdkProcessClientProcessMapper;
+
     public ProcessRequestServiceImpl(RuntimeService runtimeService,
                                      TaskService taskService,
                                      HistoryService historyService,
                                      RepositoryService repositoryService,
                                      FlowableDeployService flowableDeployService,
-                                     WcdkProcessClientCallbackService wcdkProcessClientCallbackService) {
+                                     WcdkProcessClientCallbackService wcdkProcessClientCallbackService,
+                                     WcdkProcessClientProcessMapper wcdkProcessClientProcessMapper) {
         this.runtimeService = runtimeService;
         this.taskService = taskService;
         this.historyService = historyService;
         this.repositoryService = repositoryService;
         this.flowableDeployService = flowableDeployService;
         this.wcdkProcessClientCallbackService = wcdkProcessClientCallbackService;
+        this.wcdkProcessClientProcessMapper = wcdkProcessClientProcessMapper;
     }
 
     @Override
@@ -271,7 +278,7 @@ public class ProcessRequestServiceImpl extends ServiceImpl<ProcessRequestMapper,
         if (StringUtils.hasText(processRequest.getProcessNo())) {
             variables.putIfAbsent("processNo", processRequest.getProcessNo());
         }
-        String processBeanName = resolveFormProcessBeanName(processRequest);
+        String processBeanName = resolveProcessBeanName(processRequest);
         if (StringUtils.hasText(processBeanName)) {
             variables.putIfAbsent(PROCESS_BEAN_NAME, processBeanName);
         }
@@ -401,10 +408,10 @@ public class ProcessRequestServiceImpl extends ServiceImpl<ProcessRequestMapper,
 
     private void notifyProcessCallback(ProcessRequest processRequest, String eventType, String message) {
         String processBeanName = resolveProcessBeanName(processRequest);
-        if (!StringUtils.hasText(processBeanName)) {
+        ProcessRequestResponse response = buildProcessRequestResponse(processRequest);
+        if (!StringUtils.hasText(response.getProcessDefinitionId())) {
             return;
         }
-        ProcessRequestResponse response = buildProcessRequestResponse(processRequest);
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("id", response.getId());
         payload.put("processNo", response.getProcessNo());
@@ -417,7 +424,9 @@ public class ProcessRequestServiceImpl extends ServiceImpl<ProcessRequestMapper,
         payload.put("currentTaskName", response.getCurrentTaskName());
         payload.put("activeNodeIds", response.getActiveNodeIds());
         payload.put("formData", response.getFormData());
-        payload.put(PROCESS_BEAN_NAME, processBeanName);
+        if (StringUtils.hasText(processBeanName)) {
+            payload.put(PROCESS_BEAN_NAME, processBeanName);
+        }
         wcdkProcessClientCallbackService.callback(WcdkProcessConnectionEvent.builder()
                 .processInstanceId(response.getProcessInstanceId())
                 .processDefinitionId(response.getProcessDefinitionId())
@@ -520,7 +529,22 @@ public class ProcessRequestServiceImpl extends ServiceImpl<ProcessRequestMapper,
                 return String.valueOf(historicVariableInstance.getValue()).trim();
             }
         }
-        return null;
+        return resolveBoundProcessBeanName(processRequest);
+    }
+
+    private String resolveBoundProcessBeanName(ProcessRequest processRequest) {
+        String processDefinitionId = resolveProcessDefinitionId(processRequest);
+        if (!StringUtils.hasText(processDefinitionId)) {
+            return null;
+        }
+        Page<WcdkProcessClientProcess> page = wcdkProcessClientProcessMapper.selectPage(new Page<>(1, 1), new LambdaQueryWrapper<WcdkProcessClientProcess>()
+                .eq(WcdkProcessClientProcess::getProcessDefinitionId, processDefinitionId)
+                .isNotNull(WcdkProcessClientProcess::getProcessBeanName));
+        WcdkProcessClientProcess binding = page.getRecords().isEmpty() ? null : page.getRecords().get(0);
+        if (binding == null || !StringUtils.hasText(binding.getProcessBeanName())) {
+            return null;
+        }
+        return binding.getProcessBeanName().trim();
     }
 
     private String generateProcessNo(LocalDateTime now) {
@@ -561,4 +585,3 @@ public class ProcessRequestServiceImpl extends ServiceImpl<ProcessRequestMapper,
                 .collect(Collectors.toSet());
     }
 }
-

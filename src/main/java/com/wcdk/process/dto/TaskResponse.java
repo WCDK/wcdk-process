@@ -23,4 +23,6 @@ public class TaskResponse {
     private String processInstanceId;
 
     private String processDefinitionId;
+
+    private Long processRequestId;
 }

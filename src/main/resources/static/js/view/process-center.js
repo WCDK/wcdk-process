@@ -636,6 +636,23 @@ window.ProcessCenter = {
                 this.$root.showError(error.message || "加载流程图失败");
             }
         },
+        applyRouteDefinitionSelection: async function () {
+            var query = this.$route && this.$route.query ? this.$route.query : {};
+            var processDefinitionId = query.processDefinitionId || "";
+            if (!processDefinitionId) {
+                return false;
+            }
+            var selectedDefinition = this.findDefinitionById(processDefinitionId);
+            if (!selectedDefinition) {
+                this.$root.showError("未查询到跳转指定的流程定义");
+                return false;
+            }
+            this.activeTab = "create";
+            this.form.selectedDefinitionId = processDefinitionId;
+            this.form.processDefinitionKey = selectedDefinition.processDefinitionKey || "";
+            await this.handleDefinitionChange(processDefinitionId);
+            return true;
+        },
         handleProcessRowClick: function (row) {
             this.selectedProcessId = row.id;
         },
@@ -1131,7 +1148,10 @@ window.ProcessCenter = {
             this.$root.loadDefinitions(),
             this.$root.loadProcesses(this.$root.processPageNum, this.$root.processPageSize)
         ]);
-        this.resetForm();
+        var routeApplied = await this.applyRouteDefinitionSelection();
+        if (!routeApplied) {
+            this.resetForm();
+        }
         this.selectFirstProcessRow();
     },
     watch: {
@@ -1144,6 +1164,10 @@ window.ProcessCenter = {
                 this.form.processDefinitionKey = "";
                 this.$root.selectedProcessDefinitionDetail = null;
                 this.formValues = {};
+                return;
+            }
+            if (this.$route && this.$route.query && this.$route.query.processDefinitionId) {
+                this.applyRouteDefinitionSelection();
                 return;
             }
             if (!this.form.selectedDefinitionId) {
@@ -1161,6 +1185,9 @@ window.ProcessCenter = {
             if (!this.selectedProcessRow) {
                 this.selectFirstProcessRow();
             }
+        },
+        "$route.query.processDefinitionId": function () {
+            this.applyRouteDefinitionSelection();
         }
     }
 };

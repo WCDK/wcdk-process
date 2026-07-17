@@ -9,6 +9,8 @@ window.ProcessDiagram = {
     name: "process-diagram",
     template: `
         <div class="process-diagram-shell">
+            <a>鼠标悬浮节点两秒，可查看该节点完整链路</a>
+             <a>单击节点可查看节点详情</a>
             <div class="process-diagram-panel" v-if="hasDiagramData">
                 <div class="process-diagram-toolbar">
                     <div class="process-diagram-summary">
@@ -40,6 +42,7 @@ window.ProcessDiagram = {
                         ref="canvas"
                         @mousemove="handleCanvasMouseMove"
                         @mouseleave="handleCanvasMouseLeave"
+                        @click="handleCanvasClick"
                         class="process-diagram-canvas">
                     </canvas>
                     <div
@@ -58,6 +61,37 @@ window.ProcessDiagram = {
                         </div>
                     </div>
                 </div>
+                <el-dialog
+                    title="节点详情"
+                    :visible.sync="nodeDetailVisible"
+                    width="520px">
+                    <div v-if="selectedNode" class="process-node-detail">
+                        <div class="process-node-detail-row">
+                            <span>节点名称</span>
+                            <strong>{{ selectedNode.elementName || selectedNode.elementId || "-" }}</strong>
+                        </div>
+                        <div class="process-node-detail-row">
+                            <span>节点标识</span>
+                            <strong>{{ selectedNode.elementId || "-" }}</strong>
+                        </div>
+                        <div class="process-node-detail-row">
+                            <span>节点类型</span>
+                            <strong>{{ resolveNodeTypeLabel(selectedNode.elementType) || selectedNode.elementType || "-" }}</strong>
+                        </div>
+                        <div class="process-node-detail-row">
+                            <span>入口数量</span>
+                            <strong>{{ selectedNode.incomingCount || 0 }}</strong>
+                        </div>
+                        <div class="process-node-detail-row">
+                            <span>出口数量</span>
+                            <strong>{{ selectedNode.outgoingCount || 0 }}</strong>
+                        </div>
+                        <div class="process-node-detail-desc" v-if="selectedNode.documentation">
+                            <span>节点说明</span>
+                            <p>{{ selectedNode.documentation }}</p>
+                        </div>
+                    </div>
+                </el-dialog>
             </div>
             <div class="empty-panel process-diagram-empty" v-else>
                 未加载到流程图数据，请稍后重试
@@ -87,6 +121,14 @@ window.ProcessDiagram = {
                 top: 0,
                 transform: "translate(12px,12px)",
                 node: null
+            },
+            nodeDetailVisible: false,
+            selectedNode: null,
+            hoverPathTimer: null,
+            hoverPathNodeId: "",
+            hoverPath: {
+                nodeIds: [],
+                edgeIds: []
             }
         };
     },
@@ -131,6 +173,12 @@ window.ProcessDiagram = {
                 ".process-diagram-tooltip-title{margin-bottom:8px;font-size:13px;font-weight:700;line-height:1.5;word-break:break-word;}",
                 ".process-diagram-tooltip-row{display:flex;gap:10px;justify-content:space-between;font-size:12px;line-height:1.6;color:#dbe7f5;}",
                 ".process-diagram-tooltip-label{color:#93a8c3;flex-shrink:0;}",
+                ".process-node-detail{display:grid;gap:10px;}",
+                ".process-node-detail-row{display:flex;justify-content:space-between;gap:16px;padding:10px 12px;border:1px solid #e5edf7;border-radius:10px;background:#f8fbff;}",
+                ".process-node-detail-row span,.process-node-detail-desc span{color:#64748b;font-size:13px;flex-shrink:0;}",
+                ".process-node-detail-row strong{color:#1f2a44;font-size:13px;text-align:right;word-break:break-word;}",
+                ".process-node-detail-desc{padding:10px 12px;border:1px solid #e5edf7;border-radius:10px;background:#f8fbff;}",
+                ".process-node-detail-desc p{margin:8px 0 0;color:#1f2a44;line-height:1.7;word-break:break-word;}",
                 ".process-diagram-empty{padding:36px 18px;border:1px dashed #d8e3f4;border-radius:18px;background:#f8fbff;}"
             ].join("");
             document.head.appendChild(style);
@@ -138,13 +186,13 @@ window.ProcessDiagram = {
         handleResize: function () {
             this.renderCanvas();
         },
-        renderCanvas: function () {
+        renderCanvas: function (preserveTooltip) {
             if (!this.hasDiagramData) {
                 return;
             }
-            this.renderDiagramCanvas(this.$refs.canvas, this.detail, this.activeNodeIds || []);
+            this.renderDiagramCanvas(this.$refs.canvas, this.detail, this.activeNodeIds || [], !!preserveTooltip);
         },
-        renderDiagramCanvas: function (canvas, detail, activeNodeIds) {
+        renderDiagramCanvas: function (canvas, detail, activeNodeIds, preserveTooltip) {
             if (!canvas || !detail || !Array.isArray(detail.nodes) || !detail.nodes.length) {
                 return;
             }
@@ -184,7 +232,9 @@ window.ProcessDiagram = {
                 minY: minY,
                 padding: padding
             };
-            this.hideTooltip();
+            if (!preserveTooltip) {
+                this.hideTooltip();
+            }
             this.drawCanvasBackground(context, logicalWidth, logicalHeight);
             this.drawSubProcessContainers(context, nodes, minX, minY, padding, activeNodeIds || []);
             this.drawProcessEdges(context, detail.sequenceFlows || [], nodes, minX, minY, padding, activeNodeIds || []);
@@ -200,9 +250,11 @@ window.ProcessDiagram = {
             var offsetY = event.clientY - wrapperRect.top + wrapper.scrollTop - 10;
             var hoveredNode = this.findNodeAtPosition(offsetX, offsetY);
             if (!hoveredNode) {
+                this.clearHoverPath(true);
                 this.hideTooltip();
                 return;
             }
+            this.scheduleHoverPath(hoveredNode);
             this.hoverTooltip = {
                 visible: true,
                 left: offsetX,
@@ -215,12 +267,58 @@ window.ProcessDiagram = {
             });
         },
         handleCanvasMouseLeave: function () {
+            this.clearHoverPath(true);
             this.hideTooltip();
+        },
+        handleCanvasClick: function (event) {
+            var node = this.resolveNodeFromCanvasEvent(event);
+            if (!node) {
+                return;
+            }
+            this.selectedNode = node;
+            this.nodeDetailVisible = true;
+        },
+        resolveNodeFromCanvasEvent: function (event) {
+            var wrapper = this.$refs.canvasWrapper;
+            if (!wrapper || !this.renderedNodes.length) {
+                return null;
+            }
+            var wrapperRect = wrapper.getBoundingClientRect();
+            var offsetX = event.clientX - wrapperRect.left + wrapper.scrollLeft - 10;
+            var offsetY = event.clientY - wrapperRect.top + wrapper.scrollTop - 10;
+            return this.findNodeAtPosition(offsetX, offsetY);
         },
         hideTooltip: function () {
             this.hoverTooltip.visible = false;
             this.hoverTooltip.node = null;
             this.hoverTooltip.transform = "translate(12px,12px)";
+        },
+        scheduleHoverPath: function (node) {
+            var nodeId = node && node.elementId ? node.elementId : "";
+            if (!nodeId || nodeId === this.hoverPathNodeId) {
+                return;
+            }
+            this.clearHoverPath(true);
+            this.hoverPathNodeId = nodeId;
+            this.hoverPathTimer = window.setTimeout(function () {
+                this.hoverPath = this.buildHoverPath(nodeId);
+                this.renderCanvas(true);
+            }.bind(this), 2000);
+        },
+        clearHoverPath: function (rerender) {
+            if (this.hoverPathTimer) {
+                window.clearTimeout(this.hoverPathTimer);
+                this.hoverPathTimer = null;
+            }
+            var hadPath = this.hoverPath.nodeIds.length || this.hoverPath.edgeIds.length;
+            this.hoverPathNodeId = "";
+            this.hoverPath = {
+                nodeIds: [],
+                edgeIds: []
+            };
+            if (rerender && hadPath) {
+                this.renderCanvas(true);
+            }
         },
         repositionTooltip: function (anchorX, anchorY) {
             var wrapper = this.$refs.canvasWrapper;
@@ -306,6 +404,77 @@ window.ProcessDiagram = {
             }
             return pointX >= bounds.x && pointX <= bounds.x + bounds.width && pointY >= bounds.y && pointY <= bounds.y + bounds.height;
         },
+        buildHoverPath: function (nodeId) {
+            var detail = this.detail || {};
+            var sequenceFlows = Array.isArray(detail.sequenceFlows) ? detail.sequenceFlows : [];
+            var nodeMap = {};
+            var incomingMap = {};
+            var outgoingMap = {};
+            var nodeIds = {};
+            var edgeIds = {};
+            (detail.nodes || []).forEach(function (node) {
+                if (node.elementId) {
+                    nodeMap[node.elementId] = true;
+                }
+            });
+            sequenceFlows.forEach(function (edge) {
+                if (!edge.sourceRef || !edge.targetRef) {
+                    return;
+                }
+                if (!incomingMap[edge.targetRef]) {
+                    incomingMap[edge.targetRef] = [];
+                }
+                if (!outgoingMap[edge.sourceRef]) {
+                    outgoingMap[edge.sourceRef] = [];
+                }
+                incomingMap[edge.targetRef].push(edge);
+                outgoingMap[edge.sourceRef].push(edge);
+            });
+            if (!nodeMap[nodeId]) {
+                return { nodeIds: [], edgeIds: [] };
+            }
+            nodeIds[nodeId] = true;
+            this.collectHoverPath(nodeId, incomingMap, "sourceRef", nodeIds, edgeIds);
+            this.collectHoverPath(nodeId, outgoingMap, "targetRef", nodeIds, edgeIds);
+            return {
+                nodeIds: Object.keys(nodeIds),
+                edgeIds: Object.keys(edgeIds)
+            };
+        },
+        collectHoverPath: function (startNodeId, edgeMap, nextNodeField, nodeIds, edgeIds) {
+            var queue = [startNodeId];
+            var visited = {};
+            while (queue.length) {
+                var currentNodeId = queue.shift();
+                if (visited[currentNodeId]) {
+                    continue;
+                }
+                visited[currentNodeId] = true;
+                var edges = edgeMap[currentNodeId] || [];
+                for (var i = 0; i < edges.length; i += 1) {
+                    var edge = edges[i];
+                    var nextNodeId = edge[nextNodeField];
+                    if (!nextNodeId) {
+                        continue;
+                    }
+                    edgeIds[this.resolveEdgeId(edge)] = true;
+                    nodeIds[nextNodeId] = true;
+                    queue.push(nextNodeId);
+                }
+            }
+        },
+        resolveEdgeId: function (edge) {
+            return edge.elementId || ((edge.sourceRef || "") + "->" + (edge.targetRef || ""));
+        },
+        buildValueMap: function (values) {
+            var result = {};
+            (values || []).forEach(function (value) {
+                if (value) {
+                    result[value] = true;
+                }
+            });
+            return result;
+        },
         drawCanvasBackground: function (context, width, height) {
             var background = context.createLinearGradient(0, 0, 0, height);
             background.addColorStop(0, "#fcfdff");
@@ -335,6 +504,7 @@ window.ProcessDiagram = {
             }
             var nodeMap = {};
             var activeNodeMap = {};
+            var hoverEdgeMap = this.buildValueMap(this.hoverPath.edgeIds);
             var i;
             for (i = 0; i < nodes.length; i += 1) {
                 nodeMap[nodes[i].elementId] = nodes[i];
@@ -349,17 +519,18 @@ window.ProcessDiagram = {
                 if (!sourceNode || !targetNode) {
                     continue;
                 }
+                var isHoverEdge = !!hoverEdgeMap[this.resolveEdgeId(edge)];
                 var isActiveEdge = !!(activeNodeMap[edge.sourceRef] || activeNodeMap[edge.targetRef]);
                 context.save();
-                context.lineWidth = isActiveEdge ? 3 : 2;
-                context.strokeStyle = isActiveEdge ? "#22c55e" : "#8fa3bf";
-                context.shadowColor = isActiveEdge ? "rgba(34,197,94,0.24)" : "rgba(15,23,42,0.08)";
-                context.shadowBlur = isActiveEdge ? 12 : 4;
+                context.lineWidth = isHoverEdge ? 4 : (isActiveEdge ? 3 : 2);
+                context.strokeStyle = isHoverEdge ? "#f97316" : (isActiveEdge ? "#22c55e" : "#8fa3bf");
+                context.shadowColor = isHoverEdge ? "rgba(249,115,22,0.32)" : (isActiveEdge ? "rgba(34,197,94,0.24)" : "rgba(15,23,42,0.08)");
+                context.shadowBlur = isHoverEdge ? 16 : (isActiveEdge ? 12 : 4);
                 if (Array.isArray(edge.waypoints) && edge.waypoints.length >= 2) {
                     var normalizedWaypoints = this.normalizeEdgeWaypoints(edge.waypoints, minX, minY, padding);
                     this.drawEdgePathByWaypoints(context, normalizedWaypoints);
                     var lastPoint = normalizedWaypoints[normalizedWaypoints.length - 1];
-                    this.drawArrowHead(context, lastPoint.x, lastPoint.y, isActiveEdge ? "#22c55e" : "#8fa3bf");
+                    this.drawArrowHead(context, lastPoint.x, lastPoint.y, isHoverEdge ? "#f97316" : (isActiveEdge ? "#22c55e" : "#8fa3bf"));
                 } else {
                     var startPoint = this.resolveExitPoint(sourceNode, minX, minY, padding);
                     var endPoint = this.resolveEntryPoint(targetNode, minX, minY, padding);
@@ -383,7 +554,7 @@ window.ProcessDiagram = {
                         context.lineTo(endPoint.x, endPoint.y);
                     }
                     context.stroke();
-                    this.drawArrowHead(context, endPoint.x, endPoint.y, isActiveEdge ? "#22c55e" : "#8fa3bf");
+                    this.drawArrowHead(context, endPoint.x, endPoint.y, isHoverEdge ? "#f97316" : (isActiveEdge ? "#22c55e" : "#8fa3bf"));
                 }
                 context.restore();
             }
@@ -393,6 +564,7 @@ window.ProcessDiagram = {
                 return;
             }
             var activeNodeMap = {};
+            var hoverNodeMap = this.buildValueMap(this.hoverPath.nodeIds);
             for (var i = 0; i < activeNodeIds.length; i += 1) {
                 activeNodeMap[activeNodeIds[i]] = true;
             }
@@ -406,19 +578,20 @@ window.ProcessDiagram = {
                 var width = node.width || 132;
                 var height = node.height || 64;
                 var isActive = !!activeNodeMap[node.elementId];
-                var theme = this.resolveNodeTheme(node, isActive);
+                var isHoverPathNode = !!hoverNodeMap[node.elementId];
+                var theme = this.resolveNodeTheme(node, isActive, isHoverPathNode);
                 context.save();
-                context.shadowColor = isActive ? "rgba(34,197,94,0.16)" : "rgba(15,23,42,0.06)";
-                context.shadowBlur = isActive ? 14 : 8;
-                context.shadowOffsetY = isActive ? 8 : 4;
+                context.shadowColor = isHoverPathNode ? "rgba(249,115,22,0.24)" : (isActive ? "rgba(34,197,94,0.16)" : "rgba(15,23,42,0.06)");
+                context.shadowBlur = isHoverPathNode ? 18 : (isActive ? 14 : 8);
+                context.shadowOffsetY = isHoverPathNode ? 10 : (isActive ? 8 : 4);
                 context.fillStyle = this.createNodeGradient(context, x, y, width, height, theme.fillStart, theme.fillEnd);
                 context.strokeStyle = theme.stroke;
-                context.lineWidth = isActive ? 3 : 2;
+                context.lineWidth = isHoverPathNode ? 4 : (isActive ? 3 : 2);
                 this.drawRoundedRect(context, x, y, width, height, 18);
                 context.fill();
                 context.stroke();
                 context.restore();
-                this.drawNodeText(context, node, x, y, width, height, theme, isActive);
+                this.drawNodeText(context, node, x, y, width, height, theme, isActive || isHoverPathNode);
             }
         },
         normalizeEdgeWaypoints: function (waypoints, minX, minY, padding) {
@@ -476,6 +649,7 @@ window.ProcessDiagram = {
         },
         drawProcessNodes: function (context, nodes, minX, minY, padding, activeNodeIds) {
             var activeNodeMap = {};
+            var hoverNodeMap = this.buildValueMap(this.hoverPath.nodeIds);
             for (var i = 0; i < activeNodeIds.length; i += 1) {
                 activeNodeMap[activeNodeIds[i]] = true;
             }
@@ -489,14 +663,15 @@ window.ProcessDiagram = {
                 var width = node.width || 132;
                 var height = node.height || 64;
                 var isActive = !!activeNodeMap[node.elementId];
-                var theme = this.resolveNodeTheme(node, isActive);
+                var isHoverPathNode = !!hoverNodeMap[node.elementId];
+                var theme = this.resolveNodeTheme(node, isActive, isHoverPathNode);
                 context.save();
-                context.shadowColor = isActive ? "rgba(34,197,94,0.22)" : "rgba(15,23,42,0.10)";
-                context.shadowBlur = isActive ? 18 : 10;
-                context.shadowOffsetY = isActive ? 10 : 6;
+                context.shadowColor = isHoverPathNode ? "rgba(249,115,22,0.28)" : (isActive ? "rgba(34,197,94,0.22)" : "rgba(15,23,42,0.10)");
+                context.shadowBlur = isHoverPathNode ? 22 : (isActive ? 18 : 10);
+                context.shadowOffsetY = isHoverPathNode ? 12 : (isActive ? 10 : 6);
                 context.fillStyle = this.createNodeGradient(context, x, y, width, height, theme.fillStart, theme.fillEnd);
                 context.strokeStyle = theme.stroke;
-                context.lineWidth = isActive ? 3 : 2;
+                context.lineWidth = isHoverPathNode ? 4 : (isActive ? 3 : 2);
                 if (node.elementType === "StartEvent" || node.elementType === "EndEvent") {
                     this.drawCircleNode(context, x, y, width, height);
                 } else if (node.elementType === "ExclusiveGateway" || node.elementType === "ParallelGateway") {
@@ -507,7 +682,7 @@ window.ProcessDiagram = {
                 context.fill();
                 context.stroke();
                 context.restore();
-                this.drawNodeText(context, node, x, y, width, height, theme, isActive);
+                this.drawNodeText(context, node, x, y, width, height, theme, isActive || isHoverPathNode);
             }
         },
         createNodeGradient: function (context, x, y, width, height, fillStart, fillEnd) {
@@ -516,7 +691,16 @@ window.ProcessDiagram = {
             gradient.addColorStop(1, fillEnd);
             return gradient;
         },
-        resolveNodeTheme: function (node, isActive) {
+        resolveNodeTheme: function (node, isActive, isHoverPathNode) {
+            if (isHoverPathNode) {
+                return {
+                    fillStart: "#fff7ed",
+                    fillEnd: "#fed7aa",
+                    stroke: "#f97316",
+                    title: "#7c2d12",
+                    subTitle: "#ea580c"
+                };
+            }
             if (isActive) {
                 return {
                     fillStart: "#f0fdf4",
@@ -670,9 +854,11 @@ window.ProcessDiagram = {
     },
     watch: {
         detail: function () {
+            this.clearHoverPath(false);
             this.$nextTick(this.renderCanvas);
         },
         activeNodeIds: function () {
+            this.clearHoverPath(false);
             this.$nextTick(this.renderCanvas);
         }
     },
@@ -683,6 +869,7 @@ window.ProcessDiagram = {
     },
     beforeDestroy: function () {
         window.removeEventListener("resize", this.handleResize);
+        this.clearHoverPath(false);
         this.hideTooltip();
     }
 };

@@ -58,6 +58,7 @@ window.TaskCenter = {
                             <el-table-column label="操作" min-width="180" fixed="right">
                                 <template slot-scope="scope">
                                     <div class="table-operations">
+                                        <el-button type="text" @click.stop="openTaskDetail(scope.row)">查看</el-button>
                                         <el-button type="text" @click.stop="openApproval(scope.row)">办理</el-button>
                                         <el-button type="text" style="color: #f56c6c;" @click.stop="handleDelete(scope.row.taskId)">删除</el-button>
                                     </div>
@@ -146,6 +147,52 @@ window.TaskCenter = {
                         未查询到待办理任务，请关闭后重试。
                     </div>
                 </el-dialog>
+
+                <el-dialog
+                    title="流程图"
+                    :visible.sync="detailDialogVisible"
+                    width="1100px"
+                    top="5vh"
+                    @opened="renderTaskDetailDiagram"
+                    @closed="handleDetailDialogClosed">
+                    <div v-if="selectedTask && taskDetail" class="process-detail-shell">
+                        <div class="process-detail-head">
+                            <div>
+                                <div class="section-kicker">流程实例图谱</div>
+                                <h3>{{ selectedTask.taskName || selectedTask.currentTaskName || selectedTask.taskId }}</h3>
+                            </div>
+                            <el-tag size="small" type="warning" effect="plain">待办任务</el-tag>
+                        </div>
+                        <div class="process-stat-grid">
+                            <div class="process-stat-card">
+                                <span class="process-stat-label">任务编号</span>
+                                <strong>{{ selectedTask.taskId || "-" }}</strong>
+                            </div>
+                            <div class="process-stat-card">
+                                <span class="process-stat-label">当前任务</span>
+                                <strong>{{ selectedTask.currentTaskName || selectedTask.taskName || "-" }}</strong>
+                            </div>
+                            <div class="process-stat-card">
+                                <span class="process-stat-label">节点数</span>
+                                <strong>{{ taskDetail.nodeCount || 0 }}</strong>
+                            </div>
+                            <div class="process-stat-card">
+                                <span class="process-stat-label">激活节点</span>
+                                <strong>{{ activeTaskNodeIds.length }}</strong>
+                            </div>
+                        </div>
+                        <div class="process-meta-list">
+                            <span class="mini-tag">流程定义：{{ taskDetail.processDefinitionName || taskDetail.processDefinitionKey || "-" }}</span>
+                            <span class="mini-tag">流程分类：{{ taskDetail.category || "未分类" }}</span>
+                            <span class="mini-tag">办理人：{{ selectedTask.assignee || "未指派" }}</span>
+                            <span class="mini-tag">流程实例：{{ selectedTask.processInstanceId || "-" }}</span>
+                        </div>
+                        <process-diagram ref="taskDetailDiagram" :detail="taskDetail" :active-node-ids="activeTaskNodeIds"></process-diagram>
+                    </div>
+                    <div v-else class="empty-panel center-empty-panel">
+                        未加载到流程图数据，请稍后重试。
+                    </div>
+                </el-dialog>
             </section>
         </section>
     `,
@@ -168,7 +215,8 @@ window.TaskCenter = {
             sortOrder: "ascending",
             selectedTaskId: "",
             approvalTaskId: "",
-            approvalDialogVisible: false
+            approvalDialogVisible: false,
+            detailDialogVisible: false
         };
     },
     computed: {
@@ -209,6 +257,13 @@ window.TaskCenter = {
                 }
             }
             return null;
+        },
+        taskDetail: function () {
+            return this.$root.selectedProcessRequestDiagramDetail;
+        },
+        activeTaskNodeIds: function () {
+            var detail = this.taskDetail;
+            return detail && Array.isArray(detail.activeNodeIds) ? detail.activeNodeIds : [];
         }
     },
     mounted: async function () {
@@ -290,6 +345,28 @@ window.TaskCenter = {
             this.form.approved = true;
             this.approvalDialogVisible = true;
         },
+        openTaskDetail: async function (row) {
+            this.selectedTaskId = row.taskId;
+            if (!row.processRequestId) {
+                this.$root.showError("未查询到任务关联的流程申请，无法查看流程图");
+                return;
+            }
+            try {
+                await this.$root.loadProcessRequestDiagramDetail(row.processRequestId);
+                this.detailDialogVisible = true;
+                this.$nextTick(this.renderTaskDetailDiagram);
+            } catch (error) {
+                this.$root.showError(error.message || "加载流程图失败");
+            }
+        },
+        renderTaskDetailDiagram: function () {
+            if (this.$refs.taskDetailDiagram && typeof this.$refs.taskDetailDiagram.renderCanvas === "function") {
+                this.$refs.taskDetailDiagram.renderCanvas();
+            }
+        },
+        handleDetailDialogClosed: function () {
+            this.$root.selectedProcessRequestDiagramDetail = null;
+        },
         handleApprovalDialogClosed: function () {
             this.approvalTaskId = "";
             this.resetApprovalForm();
@@ -347,6 +424,10 @@ window.TaskCenter = {
                 this.approvalDialogVisible = false;
                 this.approvalTaskId = "";
                 this.resetApprovalForm();
+            }
+            if (this.detailDialogVisible && !this.selectedTask) {
+                this.detailDialogVisible = false;
+                this.$root.selectedProcessRequestDiagramDetail = null;
             }
         }
     }

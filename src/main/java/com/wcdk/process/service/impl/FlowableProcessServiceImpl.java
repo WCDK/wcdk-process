@@ -212,6 +212,7 @@ public class FlowableProcessServiceImpl implements FlowableProcessService {
                 .assignee(task.getAssignee())
                 .processInstanceId(task.getProcessInstanceId())
                 .processDefinitionId(task.getProcessDefinitionId())
+                .processRequestId(processRequest == null ? null : processRequest.getId())
                 .build();
     }
 

@@ -107,6 +107,7 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
             byte[] fileBytes = file.getBytes();
             BpmnModel bpmnModel = parseBpmnModel(fileBytes);
             validateBpmnModel(bpmnModel);
+            validateProcessDefinitionUnique(bpmnModel);
             String resourceName = resolveDeploymentResourceName(file.getOriginalFilename());
             byte[] deployBytes = new BpmnXMLConverter().convertToXML(bpmnModel, StandardCharsets.UTF_8.name());
             Deployment deployment = repositoryService.createDeployment()
@@ -326,6 +327,18 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
                 .anyMatch(FlowNode.class::isInstance);
         if (!hasFlowNode) {
             throw new IllegalArgumentException("流程文件中未找到可绘制到画布的节点");
+        }
+    }
+
+    private void validateProcessDefinitionUnique(BpmnModel bpmnModel) {
+        Process mainProcess = bpmnModel.getMainProcess();
+        String processDefinitionKey = mainProcess.getId().trim();
+        ProcessDefinition existingProcessDefinition = repositoryService.createProcessDefinitionQuery()
+                .processDefinitionKey(processDefinitionKey)
+                .latestVersion()
+                .singleResult();
+        if (existingProcessDefinition != null) {
+            throw new IllegalArgumentException("流程定义标识已存在，请修改 BPMN 中的 process id 后重新部署，process id：" + processDefinitionKey);
         }
     }
 
