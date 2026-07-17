@@ -65,39 +65,11 @@ window.ProcessDiagram = {
                     title="节点详情"
                     :visible.sync="nodeDetailVisible"
                     width="520px">
-                    <div v-if="selectedNode" class="process-node-detail">
-                        <div class="process-node-detail-row">
-                            <span>节点名称</span>
-                            <strong>{{ selectedNode.elementName || selectedNode.elementId || "-" }}</strong>
-                        </div>
-                        <div class="process-node-detail-row">
-                            <span>节点标识</span>
-                            <strong>{{ selectedNode.elementId || "-" }}</strong>
-                        </div>
-                        <div class="process-node-detail-row">
-                            <span>节点类型</span>
-                            <strong>{{ resolveNodeTypeLabel(selectedNode.elementType) || selectedNode.elementType || "-" }}</strong>
-                        </div>
-                        <div
-                            v-for="item in resolveNodePropertySummaries(selectedNode)"
-                            :key="item.label"
-                            class="process-node-detail-row">
-                            <span>{{ item.label }}</span>
-                            <strong>{{ item.value }}</strong>
-                        </div>
-                        <div class="process-node-detail-row">
-                            <span>入口数量</span>
-                            <strong>{{ selectedNode.incomingCount || 0 }}</strong>
-                        </div>
-                        <div class="process-node-detail-row">
-                            <span>出口数量</span>
-                            <strong>{{ selectedNode.outgoingCount || 0 }}</strong>
-                        </div>
-                        <div class="process-node-detail-desc" v-if="selectedNode.documentation">
-                            <span>节点说明</span>
-                            <p>{{ selectedNode.documentation }}</p>
-                        </div>
-                    </div>
+                    <process-diagram-node-detail
+                        v-if="selectedNode"
+                        :node="selectedNode"
+                        :resolve-node-type-label="resolveNodeTypeLabel">
+                    </process-diagram-node-detail>
                 </el-dialog>
             </div>
             <div class="empty-panel process-diagram-empty" v-else>
@@ -811,6 +783,44 @@ window.ProcessDiagram = {
             return node.elementName || node.elementId || "-";
         },
         resolveNodePropertySummaries: function (node) {
+            if (window.ProcessDiagramNodePropertySupport) {
+                var compatibleProperties = window.ProcessDiagramNodePropertySupport.normalizeNodeProperties(node);
+                var compatibleRows = [];
+                var compatiblePairs = [
+                    { label: "表单标识", value: compatibleProperties.formKey },
+                    { label: "发起人变量", value: compatibleProperties.initiator },
+                    { label: "办理人", value: compatibleProperties.assignee },
+                    { label: "候选用户", value: compatibleProperties.candidateUsers },
+                    { label: "候选组", value: compatibleProperties.candidateGroups },
+                    { label: "到期时间", value: compatibleProperties.dueDate },
+                    { label: "优先级", value: compatibleProperties.priority },
+                    { label: "实现类", value: compatibleProperties.className },
+                    { label: "委托表达式", value: compatibleProperties.delegateExpression },
+                    { label: "执行表达式", value: compatibleProperties.expression },
+                    { label: "结果变量", value: compatibleProperties.resultVariable },
+                    { label: "脚本格式", value: compatibleProperties.scriptFormat },
+                    { label: "调用类型", value: compatibleProperties.type },
+                    { label: "收件人", value: compatibleProperties.to },
+                    { label: "邮件主题", value: compatibleProperties.subject },
+                    { label: "调用流程", value: compatibleProperties.calledElement },
+                    { label: "事件定义", value: compatibleProperties.eventDefinitionType },
+                    { label: "消息引用", value: compatibleProperties.messageRef },
+                    { label: "定时表达式", value: compatibleProperties.timerDefinition },
+                    { label: "信号引用", value: compatibleProperties.signalRef },
+                    { label: "错误引用", value: compatibleProperties.errorRef },
+                    { label: "集合变量", value: compatibleProperties.collection },
+                    { label: "元素变量", value: compatibleProperties.elementVariable },
+                    { label: "完成条件", value: compatibleProperties.completionCondition },
+                    { label: "跳过表达式", value: compatibleProperties.skipExpression },
+                    { label: "多实例", value: compatibleProperties.multiInstanceEnabled },
+                    { label: "异步执行", value: compatibleProperties.async },
+                    { label: "排他执行", value: compatibleProperties.exclusive }
+                ];
+                for (var pairIndex = 0; pairIndex < compatiblePairs.length; pairIndex += 1) {
+                    window.ProcessDiagramNodePropertySupport.pushRow(compatibleRows, compatiblePairs[pairIndex].label, compatiblePairs[pairIndex].value);
+                }
+                return compatibleRows;
+            }
             var properties = this.normalizeNodeProperties(node);
             var rows = [];
             var pushRow = function (label, value) {
@@ -859,6 +869,9 @@ window.ProcessDiagram = {
             return rows;
         },
         normalizeNodeProperties: function (node) {
+            if (window.ProcessDiagramNodePropertySupport) {
+                return window.ProcessDiagramNodePropertySupport.normalizeNodeProperties(node);
+            }
             var result = {};
             var merge = function (source) {
                 if (!source) {
@@ -965,6 +978,7 @@ window.ProcessDiagram = {
                 ScriptTask: "脚本任务",
                 ManualTask: "人工任务",
                 ServiceTask: "服务任务",
+                MailTask: "邮件任务",
                 ReceiveTask: "接收任务",
                 BusinessRuleTask: "业务规则任务",
                 CallActivity: "调用活动",
@@ -1024,6 +1038,7 @@ window.ProcessDiagramUtils = {
             endEvent: "EndEvent",
             userTask: "UserTask",
             scriptTask: "ScriptTask",
+            mailTask: "MailTask",
             manualTask: "ManualTask",
             serviceTask: "ServiceTask",
             receiveTask: "ReceiveTask",
@@ -1360,6 +1375,7 @@ window.ProcessDiagramUtils = {
             ScriptTask: "脚本任务",
             ManualTask: "人工任务",
             ServiceTask: "服务任务",
+            MailTask: "邮件任务",
             ReceiveTask: "接收任务",
             BusinessRuleTask: "业务规则任务",
             CallActivity: "调用活动",
