@@ -78,6 +78,13 @@ window.ProcessDiagram = {
                             <span>节点类型</span>
                             <strong>{{ resolveNodeTypeLabel(selectedNode.elementType) || selectedNode.elementType || "-" }}</strong>
                         </div>
+                        <div
+                            v-for="item in resolveNodePropertySummaries(selectedNode)"
+                            :key="item.label"
+                            class="process-node-detail-row">
+                            <span>{{ item.label }}</span>
+                            <strong>{{ item.value }}</strong>
+                        </div>
                         <div class="process-node-detail-row">
                             <span>入口数量</span>
                             <strong>{{ selectedNode.incomingCount || 0 }}</strong>
@@ -803,6 +810,119 @@ window.ProcessDiagram = {
         resolveTooltipTitle: function (node) {
             return node.elementName || node.elementId || "-";
         },
+        resolveNodePropertySummaries: function (node) {
+            var properties = this.normalizeNodeProperties(node);
+            var rows = [];
+            var pushRow = function (label, value) {
+                if (value === null || typeof value === "undefined" || value === "") {
+                    return;
+                }
+                if (Array.isArray(value)) {
+                    value = value.join("，");
+                }
+                if (typeof value === "object") {
+                    value = JSON.stringify(value);
+                }
+                rows.push({
+                    label: label,
+                    value: value === true ? "是" : (value === false ? "否" : String(value))
+                });
+            };
+            pushRow("表单标识", properties.formKey);
+            pushRow("发起人变量", properties.initiator);
+            pushRow("办理人", properties.assignee);
+            pushRow("候选用户", properties.candidateUsers);
+            pushRow("候选组", properties.candidateGroups);
+            pushRow("到期时间", properties.dueDate);
+            pushRow("优先级", properties.priority);
+            pushRow("实现类", properties.className);
+            pushRow("委托表达式", properties.delegateExpression);
+            pushRow("执行表达式", properties.expression);
+            pushRow("结果变量", properties.resultVariable);
+            pushRow("脚本格式", properties.scriptFormat);
+            pushRow("调用类型", properties.type);
+            pushRow("收件人", properties.to);
+            pushRow("邮件主题", properties.subject);
+            pushRow("调用流程", properties.calledElement);
+            pushRow("事件定义", properties.eventDefinitionType);
+            pushRow("消息引用", properties.messageRef);
+            pushRow("定时表达式", properties.timerDefinition);
+            pushRow("信号引用", properties.signalRef);
+            pushRow("错误引用", properties.errorRef);
+            pushRow("集合变量", properties.collection);
+            pushRow("元素变量", properties.elementVariable);
+            pushRow("完成条件", properties.completionCondition);
+            pushRow("跳过表达式", properties.skipExpression);
+            pushRow("多实例", properties.multiInstanceEnabled);
+            pushRow("异步执行", properties.async);
+            pushRow("排他执行", properties.exclusive);
+            return rows;
+        },
+        normalizeNodeProperties: function (node) {
+            var result = {};
+            var merge = function (source) {
+                if (!source) {
+                    return;
+                }
+                if (typeof source === "string") {
+                    try {
+                        source = JSON.parse(source);
+                    } catch (error) {
+                        return;
+                    }
+                }
+                if (Array.isArray(source)) {
+                    for (var index = 0; index < source.length; index += 1) {
+                        var item = source[index] || {};
+                        var key = item.name || item.key || item.code || "";
+                        if (key) {
+                            result[key] = item.value;
+                        }
+                    }
+                    return;
+                }
+                if (typeof source !== "object") {
+                    return;
+                }
+                for (var key in source) {
+                    if (Object.prototype.hasOwnProperty.call(source, key) && typeof source[key] !== "undefined" && source[key] !== null && source[key] !== "") {
+                        result[key] = source[key];
+                    }
+                }
+            };
+            merge(node && node.properties);
+            merge(node && node.attributes);
+            merge(node && node.extensionProperties);
+            merge(node && node.flowableProperties);
+            merge(node && node.propertyMap);
+            merge(node && node.config);
+            var directKeys = [
+                "initiator", "formKey", "assignee", "candidateUsers", "candidateGroups", "dueDate", "priority",
+                "className", "delegateExpression", "expression", "resultVariable", "scriptFormat", "script",
+                "calledElement", "messageRef", "timerDefinition", "signalRef", "errorRef", "eventDefinitionType",
+                "collection", "elementVariable", "completionCondition", "skipExpression", "async", "exclusive",
+                "type", "to", "subject", "text"
+            ];
+            for (var index = 0; index < directKeys.length; index += 1) {
+                var directKey = directKeys[index];
+                if (node && typeof node[directKey] !== "undefined" && node[directKey] !== null && node[directKey] !== "") {
+                    result[directKey] = node[directKey];
+                }
+            }
+            if (!result.className && result["class"]) {
+                result.className = result["class"];
+            }
+            if (typeof result.async === "string") {
+                result.async = result.async === "true";
+            }
+            if (typeof result.exclusive === "string") {
+                result.exclusive = result.exclusive !== "false";
+            }
+            if (typeof result.multiInstanceEnabled === "string") {
+                result.multiInstanceEnabled = result.multiInstanceEnabled === "true";
+            }
+            return result;
+        },
         wrapText: function (context, text, maxWidth, font) {
             var safeText = text || "";
             if (!safeText) {
@@ -842,11 +962,20 @@ window.ProcessDiagram = {
                 StartEvent: "开始",
                 EndEvent: "结束",
                 UserTask: "用户任务",
+                ScriptTask: "脚本任务",
                 ManualTask: "人工任务",
                 ServiceTask: "服务任务",
+                ReceiveTask: "接收任务",
+                BusinessRuleTask: "业务规则任务",
+                CallActivity: "调用活动",
+                BoundaryEvent: "边界事件",
+                IntermediateCatchEvent: "中间捕获事件",
+                IntermediateThrowEvent: "中间抛出事件",
                 ExclusiveGateway: "排他网关",
                 ParallelGateway: "并行网关",
                 InclusiveGateway: "包容网关",
+                EventGateway: "事件网关",
+                TextAnnotation: "注释",
                 SequenceFlow: "连线"
             };
             return labelMap[elementType] || "";
@@ -894,12 +1023,21 @@ window.ProcessDiagramUtils = {
             startEvent: "StartEvent",
             endEvent: "EndEvent",
             userTask: "UserTask",
+            scriptTask: "ScriptTask",
             manualTask: "ManualTask",
             serviceTask: "ServiceTask",
+            receiveTask: "ReceiveTask",
+            businessRuleTask: "BusinessRuleTask",
+            callActivity: "CallActivity",
+            boundaryEvent: "BoundaryEvent",
+            intermediateCatchEvent: "IntermediateCatchEvent",
+            intermediateThrowEvent: "IntermediateThrowEvent",
             subProcess: "SubProcess",
             exclusiveGateway: "ExclusiveGateway",
             parallelGateway: "ParallelGateway",
-            inclusiveGateway: "InclusiveGateway"
+            inclusiveGateway: "InclusiveGateway",
+            eventBasedGateway: "EventGateway",
+            textAnnotation: "TextAnnotation"
         };
         this.collectPreviewFlowElements(processElement, shapeMap, edgeWaypointMap, supportedNodeTypes, nodes, sequenceFlows);
         var nodeMap = {};
@@ -977,6 +1115,8 @@ window.ProcessDiagramUtils = {
                     elementName: child.getAttribute("name") || "",
                     elementType: supportedNodeTypes[localName],
                     documentation: this.extractDocumentation(child),
+                    properties: this.extractNodeProperties(child, localName),
+                    defaultFlowId: child.getAttribute("default") || "",
                     x: this.toNumber(bounds.x, nodes.length * 180),
                     y: this.toNumber(bounds.y, 0),
                     width: this.toNumber(bounds.width, isEventNode ? 56 : 120),
@@ -996,6 +1136,7 @@ window.ProcessDiagramUtils = {
                     elementName: child.getAttribute("name") || "",
                     sourceRef: child.getAttribute("sourceRef") || "",
                     targetRef: child.getAttribute("targetRef") || "",
+                    conditionExpression: this.extractConditionExpression(child),
                     waypoints: edgeWaypointMap[flowId] || []
                 });
             }
@@ -1019,6 +1160,166 @@ window.ProcessDiagramUtils = {
     extractDocumentation: function (element) {
         var documentation = this.findFirstElementByLocalName(element, "documentation");
         return documentation && documentation.textContent ? documentation.textContent.trim() : "";
+    },
+    extractConditionExpression: function (element) {
+        var conditionExpression = this.findFirstElementByLocalName(element, "conditionExpression");
+        return conditionExpression && conditionExpression.textContent ? conditionExpression.textContent.trim() : "";
+    },
+    extractNodeProperties: function (element, localName) {
+        var properties = {
+            initiator: this.getAnyAttribute(element, "initiator"),
+            formKey: this.getAnyAttribute(element, "formKey"),
+            assignee: this.getAnyAttribute(element, "assignee"),
+            candidateUsers: this.getAnyAttribute(element, "candidateUsers"),
+            candidateGroups: this.getAnyAttribute(element, "candidateGroups"),
+            dueDate: this.getAnyAttribute(element, "dueDate"),
+            priority: this.getAnyAttribute(element, "priority"),
+            implementationType: "class",
+            className: this.getAnyAttribute(element, "class"),
+            delegateExpression: this.getAnyAttribute(element, "delegateExpression"),
+            expression: this.getAnyAttribute(element, "expression"),
+            resultVariable: this.getAnyAttribute(element, "resultVariable"),
+            scriptFormat: element.getAttribute("scriptFormat") || "",
+            script: "",
+            calledElement: element.getAttribute("calledElement") || "",
+            inheritVariables: this.getAnyAttribute(element, "inheritVariables") !== "false",
+            messageRef: "",
+            timerDefinition: "",
+            signalRef: "",
+            errorRef: "",
+            eventDefinitionType: "",
+            attachedToRef: element.getAttribute("attachedToRef") || "",
+            cancelActivity: element.getAttribute("cancelActivity") !== "false",
+            triggeredByEvent: element.getAttribute("triggeredByEvent") === "true",
+            async: this.getAnyAttribute(element, "async") === "true",
+            exclusive: this.getAnyAttribute(element, "exclusive") !== "false",
+            multiInstanceEnabled: false,
+            multiInstanceSequential: false,
+            collection: "",
+            elementVariable: "",
+            completionCondition: "",
+            text: this.getAnyAttribute(element, "text"),
+            to: this.getAnyAttribute(element, "to"),
+            subject: this.getAnyAttribute(element, "subject"),
+            ruleVariablesInput: this.getAnyAttribute(element, "ruleVariablesInput")
+        };
+        this.mergeObject(properties, this.extractExtensionFieldProperties(element));
+        if (properties.delegateExpression) {
+            properties.implementationType = "delegateExpression";
+        } else if (properties.expression) {
+            properties.implementationType = "expression";
+        }
+        var scriptElement = this.findFirstElementByLocalName(element, "script");
+        if (scriptElement && scriptElement.textContent) {
+            properties.script = scriptElement.textContent.trim();
+        }
+        var textElement = this.findFirstElementByLocalName(element, "text");
+        if (textElement && textElement.textContent) {
+            properties.text = textElement.textContent.trim();
+        }
+        this.fillEventProperties(element, properties);
+        this.fillMultiInstanceProperties(element, properties);
+        return properties;
+    },
+    mergeObject: function (target, source) {
+        if (!target || !source) {
+            return target;
+        }
+        for (var key in source) {
+            if (Object.prototype.hasOwnProperty.call(source, key) && source[key] !== "") {
+                target[key] = source[key];
+            }
+        }
+        return target;
+    },
+    extractExtensionFieldProperties: function (element) {
+        var result = {};
+        var children = element && element.children ? element.children : [];
+        for (var childIndex = 0; childIndex < children.length; childIndex += 1) {
+            var child = children[childIndex];
+            var localName = child.localName || child.nodeName || "";
+            if (localName !== "extensionElements") {
+                continue;
+            }
+            var extensionChildren = child.children || [];
+            for (var fieldIndex = 0; fieldIndex < extensionChildren.length; fieldIndex += 1) {
+                var field = extensionChildren[fieldIndex];
+                var fieldLocalName = field.localName || field.nodeName || "";
+                if (fieldLocalName !== "field") {
+                    continue;
+                }
+                var fieldName = field.getAttribute("name") || "";
+                if (!fieldName) {
+                    continue;
+                }
+                result[fieldName] = this.extractExtensionFieldValue(field);
+            }
+        }
+        return result;
+    },
+    extractExtensionFieldValue: function (fieldElement) {
+        var directValue = this.getAnyAttribute(fieldElement, "stringValue")
+            || this.getAnyAttribute(fieldElement, "expression")
+            || this.getAnyAttribute(fieldElement, "delegateExpression");
+        if (directValue) {
+            return directValue;
+        }
+        var stringElement = this.findFirstElementByLocalName(fieldElement, "string");
+        if (stringElement && stringElement.textContent) {
+            return stringElement.textContent.trim();
+        }
+        var expressionElement = this.findFirstElementByLocalName(fieldElement, "expression");
+        if (expressionElement && expressionElement.textContent) {
+            return expressionElement.textContent.trim();
+        }
+        return fieldElement && fieldElement.textContent ? fieldElement.textContent.trim() : "";
+    },
+    fillEventProperties: function (element, properties) {
+        var messageEventDefinition = this.findFirstElementByLocalName(element, "messageEventDefinition");
+        var timerEventDefinition = this.findFirstElementByLocalName(element, "timerEventDefinition");
+        var signalEventDefinition = this.findFirstElementByLocalName(element, "signalEventDefinition");
+        var errorEventDefinition = this.findFirstElementByLocalName(element, "errorEventDefinition");
+        if (messageEventDefinition) {
+            properties.eventDefinitionType = "message";
+            properties.messageRef = messageEventDefinition.getAttribute("messageRef") || "";
+        } else if (timerEventDefinition) {
+            properties.eventDefinitionType = "timer";
+            var timeDuration = this.findFirstElementByLocalName(timerEventDefinition, "timeDuration");
+            properties.timerDefinition = timeDuration && timeDuration.textContent ? timeDuration.textContent.trim() : "";
+        } else if (signalEventDefinition) {
+            properties.eventDefinitionType = "signal";
+            properties.signalRef = signalEventDefinition.getAttribute("signalRef") || "";
+        } else if (errorEventDefinition) {
+            properties.eventDefinitionType = "error";
+            properties.errorRef = errorEventDefinition.getAttribute("errorRef") || "";
+        }
+    },
+    fillMultiInstanceProperties: function (element, properties) {
+        var loop = this.findFirstElementByLocalName(element, "multiInstanceLoopCharacteristics");
+        if (!loop) {
+            return;
+        }
+        properties.multiInstanceEnabled = true;
+        properties.multiInstanceSequential = loop.getAttribute("isSequential") === "true";
+        properties.collection = this.getAnyAttribute(loop, "collection");
+        properties.elementVariable = this.getAnyAttribute(loop, "elementVariable");
+        var completionCondition = this.findFirstElementByLocalName(loop, "completionCondition");
+        properties.completionCondition = completionCondition && completionCondition.textContent ? completionCondition.textContent.trim() : "";
+    },
+    getAnyAttribute: function (element, localName) {
+        if (!element || !element.attributes) {
+            return "";
+        }
+        if (element.hasAttribute(localName)) {
+            return element.getAttribute(localName) || "";
+        }
+        for (var index = 0; index < element.attributes.length; index += 1) {
+            var attribute = element.attributes[index];
+            if (attribute.localName === localName || attribute.name === localName || attribute.name.slice(-localName.length - 1) === ":" + localName) {
+                return attribute.value || "";
+            }
+        }
+        return "";
     },
     toNumber: function (value, fallback) {
         var nextValue = Number(value);
@@ -1056,11 +1357,20 @@ window.ProcessDiagramUtils = {
             StartEvent: "开始节点",
             EndEvent: "结束节点",
             UserTask: "用户任务",
+            ScriptTask: "脚本任务",
             ManualTask: "人工任务",
             ServiceTask: "服务任务",
+            ReceiveTask: "接收任务",
+            BusinessRuleTask: "业务规则任务",
+            CallActivity: "调用活动",
+            BoundaryEvent: "边界事件",
+            IntermediateCatchEvent: "中间捕获事件",
+            IntermediateThrowEvent: "中间抛出事件",
             ExclusiveGateway: "排他网关",
             ParallelGateway: "并行网关",
-            InclusiveGateway: "包容网关"
+            InclusiveGateway: "包容网关",
+            EventGateway: "事件网关",
+            TextAnnotation: "注释"
         };
         return mapping[elementType] || elementType || "";
     }

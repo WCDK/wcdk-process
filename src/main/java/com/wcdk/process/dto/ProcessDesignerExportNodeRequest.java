@@ -34,6 +34,8 @@ public class ProcessDesignerExportNodeRequest {
 
     private String documentation;
 
+    private String defaultFlowId;
+
     private String parentId;
 
     private Boolean expanded;

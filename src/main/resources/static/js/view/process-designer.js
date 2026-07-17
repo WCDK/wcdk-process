@@ -360,6 +360,216 @@ window.ProcessDesigner = {
                                         placeholder="请输入节点说明">
                                     </el-input>
                                 </el-form-item>
+                                <template v-if="selectedNode.properties">
+                                    <div class="designer-property-divider">节点特性</div>
+                                    <el-form-item label="发起人变量" v-if="isStartEventNode(selectedNode)">
+                                        <el-input v-model.trim="selectedNode.properties.initiator" placeholder="请输入发起人变量名，例如 startUserId"></el-input>
+                                    </el-form-item>
+                                    <el-form-item label="表单标识" v-if="supportsFormKey(selectedNode)">
+                                        <el-input v-model.trim="selectedNode.properties.formKey" placeholder="请输入表单标识或前端表单地址"></el-input>
+                                    </el-form-item>
+                                    <template v-if="isUserTaskNode(selectedNode)">
+                                        <el-form-item label="办理人">
+                                            <el-input v-model.trim="selectedNode.properties.assignee" placeholder="请输入办理人表达式，例如 \${assignee}"></el-input>
+                                        </el-form-item>
+                                        <el-form-item label="候选用户">
+                                            <el-input v-model.trim="selectedNode.properties.candidateUsers" placeholder="多个用户用英文逗号分隔"></el-input>
+                                        </el-form-item>
+                                        <el-form-item label="候选组">
+                                            <el-input v-model.trim="selectedNode.properties.candidateGroups" placeholder="多个组用英文逗号分隔"></el-input>
+                                        </el-form-item>
+                                        <el-form-item label="到期时间">
+                                            <el-input v-model.trim="selectedNode.properties.dueDate" placeholder="例如 P2D 或 \${dueDate}"></el-input>
+                                        </el-form-item>
+                                        <el-form-item label="优先级">
+                                            <el-input v-model.trim="selectedNode.properties.priority" placeholder="请输入数字或表达式"></el-input>
+                                        </el-form-item>
+                                        <el-form-item label="任务监听器">
+                                            <el-input v-model.trim="selectedNode.properties.taskListeners" type="textarea" :rows="3" placeholder="每行一个监听器配置，格式：事件:类名或表达式"></el-input>
+                                        </el-form-item>
+                                    </template>
+                                    <template v-if="isServiceTaskNode(selectedNode)">
+                                        <el-form-item label="实现方式">
+                                            <el-select v-model="selectedNode.properties.implementationType" placeholder="请选择实现方式">
+                                                <el-option label="Java 类" value="class"></el-option>
+                                                <el-option label="委托表达式" value="delegateExpression"></el-option>
+                                                <el-option label="表达式" value="expression"></el-option>
+                                            </el-select>
+                                        </el-form-item>
+                                        <el-form-item label="Java 类名" v-if="selectedNode.properties.implementationType === 'class'">
+                                            <el-input v-model.trim="selectedNode.properties.className" placeholder="请输入完整类名"></el-input>
+                                        </el-form-item>
+                                        <el-form-item label="委托表达式" v-if="selectedNode.properties.implementationType === 'delegateExpression'">
+                                            <el-input v-model.trim="selectedNode.properties.delegateExpression" placeholder="例如 \${serviceTaskDelegate}"></el-input>
+                                        </el-form-item>
+                                        <el-form-item label="执行表达式" v-if="selectedNode.properties.implementationType === 'expression'">
+                                            <el-input v-model.trim="selectedNode.properties.expression" placeholder="例如 \${bean.execute(execution)}"></el-input>
+                                        </el-form-item>
+                                        <el-form-item label="结果变量">
+                                            <el-input v-model.trim="selectedNode.properties.resultVariable" placeholder="请输入执行结果变量名"></el-input>
+                                        </el-form-item>
+                                    </template>
+                                    <template v-if="isScriptTaskNode(selectedNode)">
+                                        <el-form-item label="脚本格式">
+                                            <el-input v-model.trim="selectedNode.properties.scriptFormat" placeholder="例如 groovy、javascript"></el-input>
+                                        </el-form-item>
+                                        <el-form-item label="脚本内容">
+                                            <el-input v-model.trim="selectedNode.properties.script" type="textarea" :rows="6" placeholder="请输入脚本内容"></el-input>
+                                        </el-form-item>
+                                        <el-form-item label="结果变量">
+                                            <el-input v-model.trim="selectedNode.properties.resultVariable" placeholder="请输入脚本结果变量名"></el-input>
+                                        </el-form-item>
+                                    </template>
+                                    <template v-if="isMailTaskNode(selectedNode)">
+                                        <el-form-item label="收件人">
+                                            <el-input v-model.trim="selectedNode.properties.to" placeholder="请输入收件人，多个地址用英文逗号分隔"></el-input>
+                                        </el-form-item>
+                                        <el-form-item label="邮件主题">
+                                            <el-input v-model.trim="selectedNode.properties.subject" placeholder="请输入邮件主题"></el-input>
+                                        </el-form-item>
+                                        <el-form-item label="邮件正文">
+                                            <el-input v-model.trim="selectedNode.properties.text" type="textarea" :rows="4" placeholder="请输入邮件正文"></el-input>
+                                        </el-form-item>
+                                    </template>
+                                    <template v-if="isReceiveTaskNode(selectedNode)">
+                                        <el-form-item label="消息引用">
+                                            <el-input v-model.trim="selectedNode.properties.messageRef" placeholder="请输入消息引用标识"></el-input>
+                                        </el-form-item>
+                                    </template>
+                                    <template v-if="isBusinessRuleTaskNode(selectedNode)">
+                                        <el-form-item label="规则输入变量">
+                                            <el-input v-model.trim="selectedNode.properties.ruleVariablesInput" placeholder="请输入规则输入变量"></el-input>
+                                        </el-form-item>
+                                        <el-form-item label="规则结果变量">
+                                            <el-input v-model.trim="selectedNode.properties.resultVariable" placeholder="请输入规则结果变量"></el-input>
+                                        </el-form-item>
+                                    </template>
+                                    <template v-if="isCallActivityNode(selectedNode)">
+                                        <el-form-item label="调用流程标识">
+                                            <el-input v-model.trim="selectedNode.properties.calledElement" placeholder="请输入被调用流程定义 Key"></el-input>
+                                        </el-form-item>
+                                        <el-form-item label="继承变量">
+                                            <el-switch v-model="selectedNode.properties.inheritVariables" active-text="是" inactive-text="否"></el-switch>
+                                        </el-form-item>
+                                    </template>
+                                    <template v-if="isEventNode(selectedNode)">
+                                        <el-form-item label="事件定义">
+                                            <el-select v-model="selectedNode.properties.eventDefinitionType" clearable placeholder="请选择事件定义">
+                                                <el-option label="无" value=""></el-option>
+                                                <el-option label="消息事件" value="message"></el-option>
+                                                <el-option label="定时事件" value="timer"></el-option>
+                                                <el-option label="信号事件" value="signal"></el-option>
+                                                <el-option label="错误事件" value="error"></el-option>
+                                            </el-select>
+                                        </el-form-item>
+                                        <el-form-item label="消息引用" v-if="selectedNode.properties.eventDefinitionType === 'message'">
+                                            <el-input v-model.trim="selectedNode.properties.messageRef" placeholder="请输入消息引用"></el-input>
+                                        </el-form-item>
+                                        <el-form-item label="定时表达式" v-if="selectedNode.properties.eventDefinitionType === 'timer'">
+                                            <el-input v-model.trim="selectedNode.properties.timerDefinition" placeholder="例如 PT2H 或 \${timerValue}"></el-input>
+                                        </el-form-item>
+                                        <el-form-item label="信号引用" v-if="selectedNode.properties.eventDefinitionType === 'signal'">
+                                            <el-input v-model.trim="selectedNode.properties.signalRef" placeholder="请输入信号引用"></el-input>
+                                        </el-form-item>
+                                        <el-form-item label="错误引用" v-if="selectedNode.properties.eventDefinitionType === 'error'">
+                                            <el-input v-model.trim="selectedNode.properties.errorRef" placeholder="请输入错误引用"></el-input>
+                                        </el-form-item>
+                                        <el-form-item label="挂载活动" v-if="selectedNode.bpmnType === 'boundaryEvent'">
+                                            <el-select v-model="selectedNode.properties.attachedToRef" filterable clearable placeholder="请选择挂载活动">
+                                                <el-option v-for="item in attachableActivityOptions" :key="item.id" :label="item.name" :value="item.id"></el-option>
+                                            </el-select>
+                                        </el-form-item>
+                                        <el-form-item label="中断活动" v-if="selectedNode.bpmnType === 'boundaryEvent'">
+                                            <el-switch v-model="selectedNode.properties.cancelActivity" active-text="是" inactive-text="否"></el-switch>
+                                        </el-form-item>
+                                    </template>
+                                    <template v-if="isSubProcessNode(selectedNode)">
+                                        <el-form-item label="事件子流程">
+                                            <el-switch v-model="selectedNode.properties.triggeredByEvent" active-text="是" inactive-text="否"></el-switch>
+                                        </el-form-item>
+                                    </template>
+                                    <template v-if="isLaneOrPoolNode(selectedNode)">
+                                        <el-form-item label="参与者名称">
+                                            <el-input v-model.trim="selectedNode.properties.participantName" placeholder="请输入参与者或泳道名称"></el-input>
+                                        </el-form-item>
+                                    </template>
+                                    <template v-if="isTextAnnotationNode(selectedNode)">
+                                        <el-form-item label="注释内容">
+                                            <el-input v-model.trim="selectedNode.properties.text" type="textarea" :rows="5" placeholder="请输入注释内容"></el-input>
+                                        </el-form-item>
+                                    </template>
+                                    <template v-if="supportsMultiInstance(selectedNode)">
+                                        <div class="designer-property-divider">多实例</div>
+                                        <el-form-item label="启用多实例">
+                                            <el-switch v-model="selectedNode.properties.multiInstanceEnabled" active-text="是" inactive-text="否"></el-switch>
+                                        </el-form-item>
+                                        <template v-if="selectedNode.properties.multiInstanceEnabled">
+                                            <el-form-item label="串行执行">
+                                                <el-switch v-model="selectedNode.properties.multiInstanceSequential" active-text="串行" inactive-text="并行"></el-switch>
+                                            </el-form-item>
+                                            <el-form-item label="集合变量">
+                                                <el-input v-model.trim="selectedNode.properties.collection" placeholder="例如 \${userList}"></el-input>
+                                            </el-form-item>
+                                            <el-form-item label="元素变量">
+                                                <el-input v-model.trim="selectedNode.properties.elementVariable" placeholder="例如 user"></el-input>
+                                            </el-form-item>
+                                            <el-form-item label="完成条件">
+                                                <el-input v-model.trim="selectedNode.properties.completionCondition" placeholder="例如 \${nrOfCompletedInstances/nrOfInstances >= 0.6}"></el-input>
+                                            </el-form-item>
+                                        </template>
+                                    </template>
+                                    <template v-if="supportsExecutionConfig(selectedNode)">
+                                        <div class="designer-property-divider">执行特性</div>
+                                        <el-form-item label="异步执行">
+                                            <el-switch v-model="selectedNode.properties.async" active-text="是" inactive-text="否"></el-switch>
+                                        </el-form-item>
+                                        <el-form-item label="排他执行">
+                                            <el-switch v-model="selectedNode.properties.exclusive" active-text="是" inactive-text="否"></el-switch>
+                                        </el-form-item>
+                                        <el-form-item label="跳过表达式" v-if="isTaskNode(selectedNode)">
+                                            <el-input v-model.trim="selectedNode.properties.skipExpression" placeholder="请输入跳过表达式"></el-input>
+                                        </el-form-item>
+                                        <el-form-item label="执行监听器">
+                                            <el-input v-model.trim="selectedNode.properties.executionListeners" type="textarea" :rows="3" placeholder="每行一个监听器配置，格式：事件:类名或表达式"></el-input>
+                                        </el-form-item>
+                                    </template>
+                                </template>
+                                <el-form-item label="默认分支" v-if="isExclusiveGatewayNode(selectedNode)">
+                                    <el-select
+                                        v-model="selectedNode.defaultFlowId"
+                                        clearable
+                                        filterable
+                                        placeholder="请选择默认分支">
+                                        <el-option
+                                            v-for="item in resolveOutgoingEdgeOptions(selectedNode.id)"
+                                            :key="item.id"
+                                            :label="item.label"
+                                            :value="item.id">
+                                        </el-option>
+                                    </el-select>
+                                </el-form-item>
+                                <div v-if="isExclusiveGatewayNode(selectedNode)" class="designer-branch-config">
+                                    <div class="designer-panel-subtitle">分支条件</div>
+                                    <div
+                                        v-for="edge in resolveOutgoingEdges(selectedNode.id)"
+                                        :key="edge.id"
+                                        class="designer-branch-item">
+                                        <div class="designer-branch-head">
+                                            <span>{{ resolveEdgeDisplayName(edge) }}</span>
+                                            <span class="mini-tag" v-if="selectedNode.defaultFlowId === edge.id">默认分支</span>
+                                        </div>
+                                        <el-input
+                                            v-model.trim="edge.conditionExpression"
+                                            type="textarea"
+                                            :rows="3"
+                                            :disabled="selectedNode.defaultFlowId === edge.id"
+                                            :placeholder="resolveBranchConditionPlaceholder(edge)">
+                                        </el-input>
+                                    </div>
+                                    <div v-if="!resolveOutgoingEdges(selectedNode.id).length" class="helper-text">
+                                        请先从当前排他网关拖拽连线到目标节点。
+                                    </div>
+                                </div>
                                 <div class="designer-node-meta">
                                     <span class="mini-tag">坐标 X：{{ selectedNode.x }}</span>
                                     <span class="mini-tag">坐标 Y：{{ selectedNode.y }}</span>
@@ -382,9 +592,19 @@ window.ProcessDesigner = {
                                 <el-form-item label="连线名称">
                                     <el-input v-model.trim="selectedEdge.name" placeholder="请输入连线名称"></el-input>
                                 </el-form-item>
+                                <el-form-item label="分支条件表达式" v-if="isExclusiveGatewayEdge(selectedEdge)">
+                                    <el-input
+                                        v-model.trim="selectedEdge.conditionExpression"
+                                        type="textarea"
+                                        :rows="4"
+                                        :disabled="isExclusiveGatewayEdgeDefault(selectedEdge)"
+                                        :placeholder="resolveBranchConditionPlaceholder(selectedEdge)">
+                                    </el-input>
+                                </el-form-item>
                                 <div class="designer-node-meta">
                                     <span class="mini-tag">起点：{{ resolveNodeName(selectedEdge.sourceId) }}</span>
                                     <span class="mini-tag">终点：{{ resolveNodeName(selectedEdge.targetId) }}</span>
+                                    <span class="mini-tag" v-if="isExclusiveGatewayEdgeDefault(selectedEdge)">默认分支</span>
                                 </div>
                                 <div class="form-actions">
                                     <el-button type="danger" @click="handleDeleteSelectedEdge">删除连线</el-button>
@@ -693,6 +913,7 @@ window.ProcessDesigner = {
         selectedNode: function () {
             for (var index = 0; index < this.canvasNodes.length; index += 1) {
                 if (this.canvasNodes[index].id === this.selectedNodeId) {
+                    this.ensureNodeProperties(this.canvasNodes[index]);
                     return this.canvasNodes[index];
                 }
             }
@@ -812,6 +1033,20 @@ window.ProcessDesigner = {
             }
             return options;
         },
+        attachableActivityOptions: function () {
+            var options = [];
+            for (var index = 0; index < this.canvasNodes.length; index += 1) {
+                var node = this.canvasNodes[index];
+                if (!node || node.id === this.selectedNodeId || !this.isActivityNode(node)) {
+                    continue;
+                }
+                options.push({
+                    id: node.code || node.id,
+                    name: (node.name || node.code || node.id) + " / " + node.bpmnType
+                });
+            }
+            return options;
+        },
         selectedElementTypeLabel: function () {
             if (this.selectedNode) {
                 return "节点属性";
@@ -828,6 +1063,136 @@ window.ProcessDesigner = {
                 return this.$root.hasButton(permissionCode);
             }
             return window.AppService.hasResource(permissionCode, "BUTTON");
+        },
+        buildDefaultNodeProperties: function (bpmnType) {
+            return {
+                initiator: "",
+                formKey: "",
+                assignee: "",
+                candidateUsers: "",
+                candidateGroups: "",
+                dueDate: "",
+                priority: "",
+                taskListeners: "",
+                implementationType: "class",
+                className: "",
+                delegateExpression: "",
+                expression: "",
+                resultVariable: "",
+                scriptFormat: "groovy",
+                script: "",
+                to: "",
+                subject: "",
+                text: "",
+                messageRef: "",
+                ruleVariablesInput: "",
+                calledElement: "",
+                inheritVariables: true,
+                eventDefinitionType: "",
+                timerDefinition: "",
+                signalRef: "",
+                errorRef: "",
+                attachedToRef: "",
+                cancelActivity: true,
+                triggeredByEvent: false,
+                participantName: "",
+                multiInstanceEnabled: false,
+                multiInstanceSequential: false,
+                collection: "",
+                elementVariable: "",
+                completionCondition: "",
+                async: false,
+                exclusive: true,
+                skipExpression: "",
+                executionListeners: ""
+            };
+        },
+        ensureNodeProperties: function (node) {
+            if (!node) {
+                return {};
+            }
+            var defaults = this.buildDefaultNodeProperties(node.bpmnType);
+            if (!node.properties) {
+                this.$set(node, "properties", defaults);
+                return node.properties;
+            }
+            for (var key in defaults) {
+                if (Object.prototype.hasOwnProperty.call(defaults, key) && typeof node.properties[key] === "undefined") {
+                    this.$set(node.properties, key, defaults[key]);
+                }
+            }
+            return node.properties;
+        },
+        mergeNodeProperties: function (bpmnType, sourceProperties) {
+            var result = this.buildDefaultNodeProperties(bpmnType);
+            var source = sourceProperties || {};
+            for (var key in source) {
+                if (Object.prototype.hasOwnProperty.call(source, key)) {
+                    result[key] = source[key];
+                }
+            }
+            return result;
+        },
+        cloneNodeProperties: function (node) {
+            var properties = this.ensureNodeProperties(node);
+            var result = {};
+            for (var key in properties) {
+                if (Object.prototype.hasOwnProperty.call(properties, key)) {
+                    result[key] = properties[key];
+                }
+            }
+            return result;
+        },
+        isStartEventNode: function (node) {
+            return !!node && node.bpmnType === "startEvent";
+        },
+        isUserTaskNode: function (node) {
+            return !!node && node.bpmnType === "userTask";
+        },
+        isServiceTaskNode: function (node) {
+            return !!node && node.bpmnType === "serviceTask";
+        },
+        isScriptTaskNode: function (node) {
+            return !!node && node.bpmnType === "scriptTask";
+        },
+        isMailTaskNode: function (node) {
+            return !!node && node.bpmnType === "mailTask";
+        },
+        isReceiveTaskNode: function (node) {
+            return !!node && node.bpmnType === "receiveTask";
+        },
+        isBusinessRuleTaskNode: function (node) {
+            return !!node && node.bpmnType === "businessRuleTask";
+        },
+        isCallActivityNode: function (node) {
+            return !!node && node.bpmnType === "callActivity";
+        },
+        isSubProcessNode: function (node) {
+            return !!node && node.bpmnType === "subProcess";
+        },
+        isTextAnnotationNode: function (node) {
+            return !!node && node.bpmnType === "textAnnotation";
+        },
+        isLaneOrPoolNode: function (node) {
+            return !!node && (node.bpmnType === "lane" || node.bpmnType === "pool");
+        },
+        isEventNode: function (node) {
+            return !!node && ["startEvent", "endEvent", "boundaryEvent", "intermediateCatchEvent", "intermediateThrowEvent"].indexOf(node.bpmnType) >= 0;
+        },
+        isTaskNode: function (node) {
+            return !!node && ["userTask", "scriptTask", "serviceTask", "mailTask", "manualTask", "receiveTask", "businessRuleTask", "callActivity"].indexOf(node.bpmnType) >= 0;
+        },
+        isActivityNode: function (node) {
+            return this.isTaskNode(node) || this.isSubProcessNode(node);
+        },
+        supportsFormKey: function (node) {
+            return this.isStartEventNode(node) || this.isUserTaskNode(node);
+        },
+        supportsMultiInstance: function (node) {
+            return this.isTaskNode(node) || this.isSubProcessNode(node);
+        },
+        supportsExecutionConfig: function (node) {
+            return this.isTaskNode(node) || this.isSubProcessNode(node) || (!!node && node.kind === "gateway");
         },
         ensureStyle: function () {
             if (document.getElementById(processDesignerStyleId)) {
@@ -929,7 +1294,11 @@ window.ProcessDesigner = {
                 ".designer-summary-list{display:grid;gap:8px;}",
                 ".designer-summary-list span{font-size:12px;line-height:1.7;color:#6d809d;}",
                 ".designer-form-block{display:grid;gap:10px;}",
+                ".designer-property-divider{margin:4px 0 8px;padding-top:10px;border-top:1px solid #e5edf7;color:#30445f;font-size:13px;font-weight:700;}",
                 ".designer-node-meta{display:flex;gap:8px;flex-wrap:wrap;}",
+                ".designer-branch-config{display:grid;gap:8px;padding:10px;border:1px solid rgba(207,224,246,0.9);border-radius:8px;background:#f8fbff;}",
+                ".designer-branch-item{display:grid;gap:6px;}",
+                ".designer-branch-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;color:#31415f;}",
                 "@media (max-width: 1460px){.designer-layout{grid-template-columns:280px minmax(0,1fr) 300px;}}",
                 "@media (max-width: 1240px){.designer-layout{grid-template-columns:1fr;}.designer-stage-wrapper{min-height:460px;}.designer-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}"
             ].join("");
@@ -1031,6 +1400,8 @@ window.ProcessDesigner = {
                     name: node.name,
                     code: node.code,
                     documentation: node.documentation,
+                    defaultFlowId: node.defaultFlowId,
+                    properties: this.cloneNodeProperties(node),
                     parentId: node.parentId,
                     expanded: !!node.expanded,
                     width: node.width,
@@ -1045,7 +1416,8 @@ window.ProcessDesigner = {
                     id: edge.id,
                     sourceId: edge.sourceId,
                     targetId: edge.targetId,
-                    name: edge.name
+                    name: edge.name,
+                    conditionExpression: edge.conditionExpression
                 });
             }
             return {
@@ -1103,6 +1475,7 @@ window.ProcessDesigner = {
             var detailNodes = Array.isArray(detail.nodes) ? detail.nodes : [];
             var detailEdges = Array.isArray(detail.sequenceFlows) ? detail.sequenceFlows : [];
             var parentMap = this.buildImportedParentMap(detail.bpmnXml);
+            var propertyMap = this.buildImportedPropertiesMap(detail.bpmnXml);
             var childCountMap = {};
             for (var parentNodeId in parentMap) {
                 if (Object.prototype.hasOwnProperty.call(parentMap, parentNodeId) && parentMap[parentNodeId]) {
@@ -1113,6 +1486,7 @@ window.ProcessDesigner = {
             var maxRight = 0;
             var maxBottom = 0;
             for (var nodeIndex = 0; nodeIndex < detailNodes.length; nodeIndex += 1) {
+                detailNodes[nodeIndex].properties = propertyMap[detailNodes[nodeIndex].elementId] || detailNodes[nodeIndex].properties || {};
                 var importedNode = this.buildImportedCanvasNode(
                     detailNodes[nodeIndex],
                     parentMap[detailNodes[nodeIndex].elementId] || "",
@@ -1129,7 +1503,8 @@ window.ProcessDesigner = {
                     id: sequenceFlow.elementId || ("designer-edge-" + sequenceFlow.sourceRef + "-" + sequenceFlow.targetRef),
                     sourceId: sequenceFlow.sourceRef || "",
                     targetId: sequenceFlow.targetRef || "",
-                    name: sequenceFlow.elementName || ""
+                    name: sequenceFlow.elementName || "",
+                    conditionExpression: sequenceFlow.conditionExpression || ""
                 });
             }
             this.canvasNodes = nodes;
@@ -1163,6 +1538,8 @@ window.ProcessDesigner = {
                 name: detailNode && detailNode.elementName ? detailNode.elementName : paletteNode.label,
                 code: detailNode && detailNode.elementId ? detailNode.elementId : this.buildFlowableCode(paletteNode.bpmnType, this.nextNodeIndex),
                 documentation: detailNode && detailNode.documentation ? detailNode.documentation : "",
+                defaultFlowId: detailNode && detailNode.defaultFlowId ? detailNode.defaultFlowId : "",
+                properties: this.mergeNodeProperties(paletteNode.bpmnType, detailNode && detailNode.properties ? detailNode.properties : {}),
                 parentId: parentId || "",
                 expanded: paletteNode.bpmnType === "subProcess" ? !!expanded : false,
                 collapsedWidth: paletteNode.bpmnType === "subProcess" ? width : 0,
@@ -1192,6 +1569,126 @@ window.ProcessDesigner = {
             var parentMap = {};
             this.collectImportedParentMap(processElement, "", parentMap);
             return parentMap;
+        },
+        buildImportedPropertiesMap: function (bpmnXml) {
+            if (!bpmnXml) {
+                return {};
+            }
+            var parser = new DOMParser();
+            var documentNode = parser.parseFromString(bpmnXml, "text/xml");
+            var parseError = documentNode.getElementsByTagName("parsererror");
+            if (parseError && parseError.length) {
+                return {};
+            }
+            var processElement = this.findFirstElementByLocalName(documentNode, "process");
+            if (!processElement) {
+                return {};
+            }
+            var result = {};
+            this.collectImportedProperties(processElement, result);
+            return result;
+        },
+        collectImportedProperties: function (containerElement, result) {
+            var children = containerElement && containerElement.children ? containerElement.children : [];
+            for (var index = 0; index < children.length; index += 1) {
+                var child = children[index];
+                var localName = child.localName || child.nodeName || "";
+                var bpmnType = this.resolveImportedBpmnType(localName);
+                if (!bpmnType) {
+                    continue;
+                }
+                var elementId = child.getAttribute("id") || "";
+                if (elementId) {
+                    result[elementId] = this.extractImportedNodeProperties(child, bpmnType);
+                }
+                if (bpmnType === "subProcess") {
+                    this.collectImportedProperties(child, result);
+                }
+            }
+        },
+        extractImportedNodeProperties: function (element, bpmnType) {
+            var properties = this.buildDefaultNodeProperties(bpmnType);
+            properties.initiator = this.getAnyAttribute(element, "initiator") || "";
+            properties.formKey = this.getAnyAttribute(element, "formKey") || "";
+            properties.assignee = this.getAnyAttribute(element, "assignee") || "";
+            properties.candidateUsers = this.getAnyAttribute(element, "candidateUsers") || "";
+            properties.candidateGroups = this.getAnyAttribute(element, "candidateGroups") || "";
+            properties.dueDate = this.getAnyAttribute(element, "dueDate") || "";
+            properties.priority = this.getAnyAttribute(element, "priority") || "";
+            properties.className = this.getAnyAttribute(element, "class") || "";
+            properties.delegateExpression = this.getAnyAttribute(element, "delegateExpression") || "";
+            properties.expression = this.getAnyAttribute(element, "expression") || "";
+            properties.resultVariable = this.getAnyAttribute(element, "resultVariable") || "";
+            properties.scriptFormat = element.getAttribute("scriptFormat") || properties.scriptFormat;
+            properties.calledElement = element.getAttribute("calledElement") || "";
+            properties.inheritVariables = this.getAnyAttribute(element, "inheritVariables") !== "false";
+            properties.attachedToRef = element.getAttribute("attachedToRef") || "";
+            properties.cancelActivity = element.getAttribute("cancelActivity") !== "false";
+            properties.triggeredByEvent = element.getAttribute("triggeredByEvent") === "true";
+            properties.async = this.getAnyAttribute(element, "async") === "true";
+            properties.exclusive = this.getAnyAttribute(element, "exclusive") !== "false";
+            properties.ruleVariablesInput = this.getAnyAttribute(element, "ruleVariablesInput") || "";
+            properties.to = this.getAnyAttribute(element, "to") || "";
+            properties.subject = this.getAnyAttribute(element, "subject") || "";
+            properties.text = this.getAnyAttribute(element, "text") || "";
+            var scriptElement = this.findFirstElementByLocalName(element, "script");
+            if (scriptElement && scriptElement.textContent) {
+                properties.script = scriptElement.textContent.trim();
+            }
+            var textElement = this.findFirstElementByLocalName(element, "text");
+            if (textElement && textElement.textContent) {
+                properties.text = textElement.textContent.trim();
+            }
+            this.fillImportedEventProperties(element, properties);
+            this.fillImportedMultiInstanceProperties(element, properties);
+            return properties;
+        },
+        fillImportedEventProperties: function (element, properties) {
+            var messageEventDefinition = this.findFirstElementByLocalName(element, "messageEventDefinition");
+            var timerEventDefinition = this.findFirstElementByLocalName(element, "timerEventDefinition");
+            var signalEventDefinition = this.findFirstElementByLocalName(element, "signalEventDefinition");
+            var errorEventDefinition = this.findFirstElementByLocalName(element, "errorEventDefinition");
+            if (messageEventDefinition) {
+                properties.eventDefinitionType = "message";
+                properties.messageRef = messageEventDefinition.getAttribute("messageRef") || "";
+            } else if (timerEventDefinition) {
+                properties.eventDefinitionType = "timer";
+                var timeDuration = this.findFirstElementByLocalName(timerEventDefinition, "timeDuration");
+                properties.timerDefinition = timeDuration && timeDuration.textContent ? timeDuration.textContent.trim() : "";
+            } else if (signalEventDefinition) {
+                properties.eventDefinitionType = "signal";
+                properties.signalRef = signalEventDefinition.getAttribute("signalRef") || "";
+            } else if (errorEventDefinition) {
+                properties.eventDefinitionType = "error";
+                properties.errorRef = errorEventDefinition.getAttribute("errorRef") || "";
+            }
+        },
+        fillImportedMultiInstanceProperties: function (element, properties) {
+            var loop = this.findFirstElementByLocalName(element, "multiInstanceLoopCharacteristics");
+            if (!loop) {
+                return;
+            }
+            properties.multiInstanceEnabled = true;
+            properties.multiInstanceSequential = loop.getAttribute("isSequential") === "true";
+            properties.collection = this.getAnyAttribute(loop, "collection") || "";
+            properties.elementVariable = this.getAnyAttribute(loop, "elementVariable") || "";
+            var completionCondition = this.findFirstElementByLocalName(loop, "completionCondition");
+            properties.completionCondition = completionCondition && completionCondition.textContent ? completionCondition.textContent.trim() : "";
+        },
+        getAnyAttribute: function (element, localName) {
+            if (!element || !element.attributes) {
+                return "";
+            }
+            if (element.hasAttribute(localName)) {
+                return element.getAttribute(localName) || "";
+            }
+            for (var index = 0; index < element.attributes.length; index += 1) {
+                var attribute = element.attributes[index];
+                if (attribute.localName === localName || attribute.name === localName || attribute.name.slice(-localName.length - 1) === ":" + localName) {
+                    return attribute.value || "";
+                }
+            }
+            return "";
         },
         collectImportedParentMap: function (containerElement, parentId, parentMap) {
             var children = containerElement && containerElement.children ? containerElement.children : [];
@@ -1268,6 +1765,8 @@ window.ProcessDesigner = {
                 inclusiveGateway: "inclusiveGateway",
                 EventGateway: "eventGateway",
                 eventGateway: "eventGateway",
+                EventBasedGateway: "eventGateway",
+                eventBasedGateway: "eventGateway",
                 TextAnnotation: "textAnnotation",
                 textAnnotation: "textAnnotation"
             };
@@ -1595,15 +2094,174 @@ window.ProcessDesigner = {
                 flowChildrenMap: flowChildrenMap
             };
         },
+        appendXmlAttribute: function (attributes, name, value) {
+            if (value === null || typeof value === "undefined" || value === "") {
+                return;
+            }
+            attributes.push(name + '="' + this.escapeXml(value) + '"');
+        },
+        buildNodeAttributePart: function (node, nodeIdMap) {
+            var properties = this.ensureNodeProperties(node);
+            var attributes = [];
+            this.appendXmlAttribute(attributes, "name", node.name || node.label || node.code);
+            if (properties.async) {
+                this.appendXmlAttribute(attributes, "flowable:async", "true");
+            }
+            if (properties.async && properties.exclusive === false) {
+                this.appendXmlAttribute(attributes, "flowable:exclusive", "false");
+            }
+            if (this.supportsFormKey(node)) {
+                this.appendXmlAttribute(attributes, "flowable:formKey", properties.formKey);
+            }
+            if (node.bpmnType === "startEvent") {
+                this.appendXmlAttribute(attributes, "flowable:initiator", properties.initiator);
+            }
+            if (node.bpmnType === "userTask") {
+                this.appendXmlAttribute(attributes, "flowable:assignee", properties.assignee);
+                this.appendXmlAttribute(attributes, "flowable:candidateUsers", properties.candidateUsers);
+                this.appendXmlAttribute(attributes, "flowable:candidateGroups", properties.candidateGroups);
+                this.appendXmlAttribute(attributes, "flowable:dueDate", properties.dueDate);
+                this.appendXmlAttribute(attributes, "flowable:priority", properties.priority);
+            }
+            if (this.isTaskNode(node)) {
+                this.appendXmlAttribute(attributes, "flowable:skipExpression", properties.skipExpression);
+            }
+            if (node.bpmnType === "serviceTask") {
+                if (properties.implementationType === "delegateExpression") {
+                    this.appendXmlAttribute(attributes, "flowable:delegateExpression", properties.delegateExpression);
+                } else if (properties.implementationType === "expression") {
+                    this.appendXmlAttribute(attributes, "flowable:expression", properties.expression);
+                } else {
+                    this.appendXmlAttribute(attributes, "flowable:class", properties.className);
+                }
+                this.appendXmlAttribute(attributes, "flowable:resultVariable", properties.resultVariable);
+            }
+            if (node.bpmnType === "scriptTask") {
+                this.appendXmlAttribute(attributes, "scriptFormat", properties.scriptFormat);
+                this.appendXmlAttribute(attributes, "flowable:resultVariable", properties.resultVariable);
+            }
+            if (node.bpmnType === "mailTask") {
+                this.appendXmlAttribute(attributes, "flowable:type", "mail");
+                this.appendXmlAttribute(attributes, "flowable:to", properties.to);
+                this.appendXmlAttribute(attributes, "flowable:subject", properties.subject);
+                this.appendXmlAttribute(attributes, "flowable:text", properties.text);
+            }
+            if (node.bpmnType === "businessRuleTask") {
+                this.appendXmlAttribute(attributes, "flowable:ruleVariablesInput", properties.ruleVariablesInput);
+                this.appendXmlAttribute(attributes, "flowable:resultVariable", properties.resultVariable);
+            }
+            if (node.bpmnType === "receiveTask") {
+                this.appendXmlAttribute(attributes, "messageRef", properties.messageRef);
+            }
+            if (node.bpmnType === "callActivity") {
+                this.appendXmlAttribute(attributes, "calledElement", properties.calledElement);
+                if (properties.inheritVariables) {
+                    this.appendXmlAttribute(attributes, "flowable:inheritVariables", "true");
+                }
+            }
+            if (node.bpmnType === "boundaryEvent") {
+                this.appendXmlAttribute(attributes, "attachedToRef", this.resolveReferencedBpmnId(properties.attachedToRef, nodeIdMap));
+                this.appendXmlAttribute(attributes, "cancelActivity", properties.cancelActivity === false ? "false" : "true");
+            }
+            if (node.bpmnType === "subProcess" && properties.triggeredByEvent) {
+                this.appendXmlAttribute(attributes, "triggeredByEvent", "true");
+            }
+            return attributes.length ? " " + attributes.join(" ") : "";
+        },
+        resolveReferencedBpmnId: function (value, nodeIdMap) {
+            if (!value) {
+                return "";
+            }
+            return nodeIdMap[value] || value;
+        },
+        appendNodeExtensionElements: function (lines, node) {
+            var properties = this.ensureNodeProperties(node);
+            var listenerLines = [];
+            this.appendListenerLines(listenerLines, "flowable:executionListener", properties.executionListeners);
+            if (node.bpmnType === "userTask") {
+                this.appendListenerLines(listenerLines, "flowable:taskListener", properties.taskListeners);
+            }
+            if (!listenerLines.length) {
+                return;
+            }
+            lines.push("      <bpmn:extensionElements>");
+            for (var index = 0; index < listenerLines.length; index += 1) {
+                lines.push(listenerLines[index]);
+            }
+            lines.push("      </bpmn:extensionElements>");
+        },
+        appendListenerLines: function (lines, tagName, configText) {
+            var rows = String(configText || "").split(/\r?\n/);
+            for (var index = 0; index < rows.length; index += 1) {
+                var row = rows[index].trim();
+                if (!row) {
+                    continue;
+                }
+                var parts = row.split(":");
+                var eventName = parts.length > 1 ? parts.shift().trim() : "";
+                var implementation = parts.join(":").trim();
+                var attributes = [];
+                this.appendXmlAttribute(attributes, "event", eventName);
+                if (/^\$\{.*\}$/.test(implementation)) {
+                    this.appendXmlAttribute(attributes, "expression", implementation);
+                } else {
+                    this.appendXmlAttribute(attributes, "class", implementation || row);
+                }
+                lines.push("        <" + tagName + " " + attributes.join(" ") + " />");
+            }
+        },
+        appendEventDefinitionElements: function (lines, node) {
+            var properties = this.ensureNodeProperties(node);
+            if (properties.eventDefinitionType === "message") {
+                lines.push('      <bpmn:messageEventDefinition messageRef="' + this.escapeXml(properties.messageRef || "") + '" />');
+            } else if (properties.eventDefinitionType === "timer") {
+                lines.push("      <bpmn:timerEventDefinition>");
+                lines.push("        <bpmn:timeDuration>" + this.escapeXml(properties.timerDefinition || "") + "</bpmn:timeDuration>");
+                lines.push("      </bpmn:timerEventDefinition>");
+            } else if (properties.eventDefinitionType === "signal") {
+                lines.push('      <bpmn:signalEventDefinition signalRef="' + this.escapeXml(properties.signalRef || "") + '" />');
+            } else if (properties.eventDefinitionType === "error") {
+                lines.push('      <bpmn:errorEventDefinition errorRef="' + this.escapeXml(properties.errorRef || "") + '" />');
+            }
+        },
+        appendSpecialNodeContent: function (lines, node) {
+            var properties = this.ensureNodeProperties(node);
+            if (node.bpmnType === "scriptTask" && properties.script) {
+                lines.push("      <bpmn:script>" + this.escapeXml(properties.script) + "</bpmn:script>");
+            }
+            if (node.bpmnType === "textAnnotation" && properties.text) {
+                lines.push("      <bpmn:text>" + this.escapeXml(properties.text) + "</bpmn:text>");
+            }
+            this.appendEventDefinitionElements(lines, node);
+            this.appendMultiInstanceLoopCharacteristics(lines, node);
+        },
+        appendMultiInstanceLoopCharacteristics: function (lines, node) {
+            var properties = this.ensureNodeProperties(node);
+            if (!this.supportsMultiInstance(node) || !properties.multiInstanceEnabled) {
+                return;
+            }
+            var sequentialPart = properties.multiInstanceSequential ? ' isSequential="true"' : ' isSequential="false"';
+            var collectionPart = properties.collection ? ' flowable:collection="' + this.escapeXml(properties.collection) + '"' : "";
+            var elementPart = properties.elementVariable ? ' flowable:elementVariable="' + this.escapeXml(properties.elementVariable) + '"' : "";
+            lines.push("      <bpmn:multiInstanceLoopCharacteristics" + sequentialPart + collectionPart + elementPart + ">");
+            if (properties.completionCondition) {
+                lines.push("        <bpmn:completionCondition>" + this.escapeXml(properties.completionCondition) + "</bpmn:completionCondition>");
+            }
+            lines.push("      </bpmn:multiInstanceLoopCharacteristics>");
+        },
         appendContainerFlowElements: function (lines, containerId, nodeChildrenMap, flowChildrenMap, nodeTagMap, nodeIdMap, incomingMap, outgoingMap) {
             var childNodes = nodeChildrenMap[containerId || ""] || [];
+            var containerFlows = flowChildrenMap[containerId || ""] || [];
             for (var nodeIndex = 0; nodeIndex < childNodes.length; nodeIndex += 1) {
                 var node = childNodes[nodeIndex];
                 var nodeTag = nodeTagMap[node.bpmnType] || "task";
-                lines.push('    <bpmn:' + nodeTag + ' id="' + nodeIdMap[node.id] + '" name="' + this.escapeXml(node.name || node.label || node.code) + '">');
+                var defaultPart = this.resolveDefaultFlowAttribute(node, containerFlows);
+                var attributePart = this.buildNodeAttributePart(node, nodeIdMap);
+                lines.push('    <bpmn:' + nodeTag + ' id="' + nodeIdMap[node.id] + '"' + attributePart + defaultPart + '>');
                 if (node.documentation) {
                     lines.push('      <bpmn:documentation>' + this.escapeXml(node.documentation) + '</bpmn:documentation>');
                 }
+                this.appendNodeExtensionElements(lines, node);
                 var incomingFlows = incomingMap[node.id] || [];
                 for (var incomingIndex = 0; incomingIndex < incomingFlows.length; incomingIndex += 1) {
                     lines.push('      <bpmn:incoming>' + incomingFlows[incomingIndex] + '</bpmn:incoming>');
@@ -1615,14 +2273,32 @@ window.ProcessDesigner = {
                 if (node.bpmnType === "subProcess") {
                     this.appendContainerFlowElements(lines, node.id, nodeChildrenMap, flowChildrenMap, nodeTagMap, nodeIdMap, incomingMap, outgoingMap);
                 }
+                this.appendSpecialNodeContent(lines, node);
                 lines.push('    </bpmn:' + nodeTag + '>');
             }
-            var containerFlows = flowChildrenMap[containerId || ""] || [];
             for (var flowIndex = 0; flowIndex < containerFlows.length; flowIndex += 1) {
                 var flow = containerFlows[flowIndex];
                 var namePart = flow.name ? ' name="' + this.escapeXml(flow.name) + '"' : "";
-                lines.push('    <bpmn:sequenceFlow id="' + flow.id + '"' + namePart + ' sourceRef="' + nodeIdMap[flow.sourceId] + '" targetRef="' + nodeIdMap[flow.targetId] + '" />');
+                if (flow.conditionExpression) {
+                    lines.push('    <bpmn:sequenceFlow id="' + flow.id + '"' + namePart + ' sourceRef="' + nodeIdMap[flow.sourceId] + '" targetRef="' + nodeIdMap[flow.targetId] + '">');
+                    lines.push('      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">' + this.escapeXml(flow.conditionExpression) + '</bpmn:conditionExpression>');
+                    lines.push('    </bpmn:sequenceFlow>');
+                } else {
+                    lines.push('    <bpmn:sequenceFlow id="' + flow.id + '"' + namePart + ' sourceRef="' + nodeIdMap[flow.sourceId] + '" targetRef="' + nodeIdMap[flow.targetId] + '" />');
+                }
             }
+        },
+        resolveDefaultFlowAttribute: function (node, containerFlows) {
+            if (!this.isExclusiveGatewayNode(node) || !node.defaultFlowId) {
+                return "";
+            }
+            for (var index = 0; index < containerFlows.length; index += 1) {
+                var flow = containerFlows[index];
+                if (flow.sourceId === node.id && flow.originalId === node.defaultFlowId) {
+                    return ' default="' + flow.id + '"';
+                }
+            }
+            return "";
         },
         buildBpmnXmlContent: function () {
             var collected = this.collectExportableNodes();
@@ -1675,11 +2351,15 @@ window.ProcessDesigner = {
                     continue;
                 }
                 var flowId = this.sanitizeBpmnId("Flow_" + edge.sourceId + "_" + edge.targetId, "SequenceFlow", usedIds);
+                var sourceNode = this.findNodeById(edge.sourceId);
+                var isDefaultFlow = this.isExclusiveGatewayNode(sourceNode) && sourceNode.defaultFlowId === edge.id;
                 sequenceFlows.push({
                     id: flowId,
                     sourceId: edge.sourceId,
                     targetId: edge.targetId,
                     name: edge.name || "",
+                    conditionExpression: isDefaultFlow ? "" : edge.conditionExpression || "",
+                    originalId: edge.id,
                     containerId: sourceContainerId
                 });
                 if (!outgoingMap[edge.sourceId]) {
@@ -1695,6 +2375,7 @@ window.ProcessDesigner = {
                 '<?xml version="1.0" encoding="UTF-8"?>',
                 '<bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
                 '                  xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"',
+                '                  xmlns:flowable="http://flowable.org/bpmn"',
                 '                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"',
                 '                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"',
                 '                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"',
@@ -2043,6 +2724,8 @@ window.ProcessDesigner = {
                 name: paletteNode.label + nodeIndex,
                 code: this.buildFlowableCode(paletteNode.bpmnType, nodeIndex),
                 documentation: "",
+                defaultFlowId: "",
+                properties: this.buildDefaultNodeProperties(paletteNode.bpmnType),
                 parentId: "",
                 expanded: false,
                 collapsedWidth: paletteNode.bpmnType === "subProcess" ? width : 0,
@@ -2241,6 +2924,7 @@ window.ProcessDesigner = {
                 }
             }
             this.canvasEdges = nextEdges;
+            this.purgeInvalidDefaultFlowReferences();
             this.selectedEdgeId = "";
             this.$message.success("连线已删除");
         },
@@ -2445,7 +3129,8 @@ window.ProcessDesigner = {
                 id: "designer-edge-" + sourceId + "-" + targetId,
                 sourceId: sourceId,
                 targetId: targetId,
-                name: ""
+                name: "",
+                conditionExpression: ""
             };
         },
         resolveEdgeDisplayName: function (edge) {
@@ -2478,6 +3163,7 @@ window.ProcessDesigner = {
                 }
             }
             this.canvasEdges = nextEdges;
+            this.purgeInvalidDefaultFlowReferences();
             if (shouldClearSelectedEdge) {
                 this.selectedEdgeId = "";
             }
@@ -2508,6 +3194,7 @@ window.ProcessDesigner = {
             }
             if (removedCount > 0) {
                 this.canvasEdges = nextEdges;
+                this.purgeInvalidDefaultFlowReferences();
                 if (shouldClearSelectedEdge) {
                     this.selectedEdgeId = "";
                 }
@@ -2522,9 +3209,65 @@ window.ProcessDesigner = {
             }
             return null;
         },
+        hasEdgeById: function (edgeId) {
+            for (var index = 0; index < this.canvasEdges.length; index += 1) {
+                if (this.canvasEdges[index].id === edgeId) {
+                    return true;
+                }
+            }
+            return false;
+        },
+        purgeInvalidDefaultFlowReferences: function () {
+            for (var index = 0; index < this.canvasNodes.length; index += 1) {
+                var node = this.canvasNodes[index];
+                if (this.isExclusiveGatewayNode(node) && node.defaultFlowId && !this.hasEdgeById(node.defaultFlowId)) {
+                    node.defaultFlowId = "";
+                }
+            }
+        },
         resolveNodeName: function (nodeId) {
             var node = this.findNodeById(nodeId);
             return node ? node.name : "-";
+        },
+        isExclusiveGatewayNode: function (node) {
+            return !!node && node.bpmnType === "exclusiveGateway";
+        },
+        isExclusiveGatewayEdge: function (edge) {
+            return !!edge && this.isExclusiveGatewayNode(this.findNodeById(edge.sourceId));
+        },
+        isExclusiveGatewayEdgeDefault: function (edge) {
+            var sourceNode = edge ? this.findNodeById(edge.sourceId) : null;
+            return this.isExclusiveGatewayNode(sourceNode) && sourceNode.defaultFlowId === edge.id;
+        },
+        resolveOutgoingEdgeOptions: function (nodeId) {
+            var options = [];
+            for (var index = 0; index < this.canvasEdges.length; index += 1) {
+                var edge = this.canvasEdges[index];
+                if (edge.sourceId !== nodeId) {
+                    continue;
+                }
+                options.push({
+                    id: edge.id,
+                    label: this.resolveEdgeDisplayName(edge)
+                });
+            }
+            return options;
+        },
+        resolveOutgoingEdges: function (nodeId) {
+            var edges = [];
+            for (var index = 0; index < this.canvasEdges.length; index += 1) {
+                var edge = this.canvasEdges[index];
+                if (edge.sourceId === nodeId) {
+                    edges.push(edge);
+                }
+            }
+            return edges;
+        },
+        resolveBranchConditionPlaceholder: function (edge) {
+            if (this.isExclusiveGatewayEdgeDefault(edge)) {
+                return "默认分支不需要填写条件表达式";
+            }
+            return "请输入 Flowable 条件表达式，例如 ${amount > 1000}";
         },
         resolveNodeCenter: function (node, isSource) {
             if (!node) {

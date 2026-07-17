@@ -15,6 +15,8 @@ public class ProcessDiagramNodeResponse {
 
     private String documentation;
 
+    private String defaultFlowId;
+
     private Double x;
 
     private Double y;

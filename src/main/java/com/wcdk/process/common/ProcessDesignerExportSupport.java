@@ -144,6 +144,7 @@ public class ProcessDesignerExportSupport {
                     .sourceId(edge.getSourceId())
                     .targetId(edge.getTargetId())
                     .name(edge.getName())
+                    .conditionExpression(edge.getConditionExpression())
                     .build());
         }
         return result;
@@ -160,6 +161,7 @@ public class ProcessDesignerExportSupport {
                 .name(node.getName())
                 .code(node.getCode())
                 .documentation(node.getDocumentation())
+                .defaultFlowId(node.getDefaultFlowId())
                 .parentId(node.getParentId())
                 .expanded(Boolean.TRUE.equals(node.getExpanded()))
                 .width(safeInteger(node.getWidth(), 120))
@@ -349,18 +351,44 @@ public class ProcessDesignerExportSupport {
             if (!sourceContainerId.equals(targetContainerId)) {
                 continue;
             }
+            validateExclusiveGatewayCondition(sourceNode, edge);
             String flowId = sanitizeBpmnId("Flow_" + edge.getSourceId() + "_" + edge.getTargetId(), "SequenceFlow", usedIds);
+            String conditionExpression = isDefaultExclusiveGatewayFlow(sourceNode, edge) ? "" : edge.getConditionExpression();
             sequenceFlows.add(SequenceFlowExport.builder()
                     .id(flowId)
                     .sourceId(edge.getSourceId())
                     .targetId(edge.getTargetId())
                     .name(edge.getName())
+                    .conditionExpression(conditionExpression)
+                    .originalId(edge.getId())
                     .containerId(sourceContainerId)
                     .build());
             outgoingMap.computeIfAbsent(edge.getSourceId(), key -> new ArrayList<>()).add(flowId);
             incomingMap.computeIfAbsent(edge.getTargetId(), key -> new ArrayList<>()).add(flowId);
         }
         return sequenceFlows;
+    }
+
+    private void validateExclusiveGatewayCondition(ProcessDesignerExportNodeRequest sourceNode,
+                                                   ProcessDesignerExportEdgeRequest edge) {
+        if (sourceNode == null || edge == null || !"exclusiveGateway".equals(sourceNode.getBpmnType())) {
+            return;
+        }
+        if (StringUtils.hasText(sourceNode.getDefaultFlowId()) && sourceNode.getDefaultFlowId().equals(edge.getId())) {
+            return;
+        }
+        if (!StringUtils.hasText(edge.getConditionExpression())) {
+            throw new IllegalArgumentException("排他网关【" + firstText(sourceNode.getName(), sourceNode.getLabel(), sourceNode.getCode()) + "】的非默认分支需要填写条件表达式");
+        }
+    }
+
+    private boolean isDefaultExclusiveGatewayFlow(ProcessDesignerExportNodeRequest sourceNode,
+                                                  ProcessDesignerExportEdgeRequest edge) {
+        return sourceNode != null
+                && edge != null
+                && "exclusiveGateway".equals(sourceNode.getBpmnType())
+                && StringUtils.hasText(sourceNode.getDefaultFlowId())
+                && sourceNode.getDefaultFlowId().equals(edge.getId());
     }
 
     private String resolveNodeContainerId(ProcessDesignerExportNodeRequest node) {
@@ -392,7 +420,8 @@ public class ProcessDesignerExportSupport {
         List<ProcessDesignerExportNodeRequest> childNodes = nodeChildrenMap.getOrDefault(containerId, List.of());
         for (ProcessDesignerExportNodeRequest node : childNodes) {
             String nodeTag = nodeTagMap.getOrDefault(node.getBpmnType(), "task");
-            lines.add("    <bpmn:" + nodeTag + " id=\"" + nodeIdMap.get(node.getId()) + "\" name=\"" + escapeXml(firstText(node.getName(), node.getLabel(), node.getCode())) + "\">");
+            String defaultPart = resolveDefaultFlowAttribute(node, flowChildrenMap.getOrDefault(containerId, List.of()));
+            lines.add("    <bpmn:" + nodeTag + " id=\"" + nodeIdMap.get(node.getId()) + "\" name=\"" + escapeXml(firstText(node.getName(), node.getLabel(), node.getCode())) + "\"" + defaultPart + ">");
             if (StringUtils.hasText(node.getDocumentation())) {
                 lines.add("      <bpmn:documentation>" + escapeXml(node.getDocumentation()) + "</bpmn:documentation>");
             }
@@ -409,8 +438,26 @@ public class ProcessDesignerExportSupport {
         }
         for (SequenceFlowExport flow : flowChildrenMap.getOrDefault(containerId, List.of())) {
             String namePart = StringUtils.hasText(flow.getName()) ? " name=\"" + escapeXml(flow.getName()) + "\"" : "";
-            lines.add("    <bpmn:sequenceFlow id=\"" + flow.getId() + "\"" + namePart + " sourceRef=\"" + nodeIdMap.get(flow.getSourceId()) + "\" targetRef=\"" + nodeIdMap.get(flow.getTargetId()) + "\" />");
+            if (StringUtils.hasText(flow.getConditionExpression())) {
+                lines.add("    <bpmn:sequenceFlow id=\"" + flow.getId() + "\"" + namePart + " sourceRef=\"" + nodeIdMap.get(flow.getSourceId()) + "\" targetRef=\"" + nodeIdMap.get(flow.getTargetId()) + "\">");
+                lines.add("      <bpmn:conditionExpression xsi:type=\"bpmn:tFormalExpression\">" + escapeXml(flow.getConditionExpression()) + "</bpmn:conditionExpression>");
+                lines.add("    </bpmn:sequenceFlow>");
+            } else {
+                lines.add("    <bpmn:sequenceFlow id=\"" + flow.getId() + "\"" + namePart + " sourceRef=\"" + nodeIdMap.get(flow.getSourceId()) + "\" targetRef=\"" + nodeIdMap.get(flow.getTargetId()) + "\" />");
+            }
         }
+    }
+
+    private String resolveDefaultFlowAttribute(ProcessDesignerExportNodeRequest node, List<SequenceFlowExport> containerFlows) {
+        if (node == null || !"exclusiveGateway".equals(node.getBpmnType()) || !StringUtils.hasText(node.getDefaultFlowId())) {
+            return "";
+        }
+        for (SequenceFlowExport flow : containerFlows) {
+            if (node.getId().equals(flow.getSourceId()) && node.getDefaultFlowId().equals(flow.getOriginalId())) {
+                return " default=\"" + flow.getId() + "\"";
+            }
+        }
+        return "";
     }
 
     private String sanitizeBpmnId(String value, String fallbackPrefix, Map<String, Boolean> usedIds) {
@@ -824,6 +871,10 @@ public class ProcessDesignerExportSupport {
         private String targetId;
 
         private String name;
+
+        private String conditionExpression;
+
+        private String originalId;
 
         private String containerId;
     }

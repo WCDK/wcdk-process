@@ -23,4 +23,6 @@ public class ProcessDesignerExportEdgeRequest {
     private String targetId;
 
     private String name;
+
+    private String conditionExpression;
 }

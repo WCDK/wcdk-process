@@ -26,6 +26,7 @@ import org.flowable.bpmn.model.BpmnModel;
 import org.flowable.bpmn.model.FlowElement;
 import org.flowable.bpmn.model.FlowElementsContainer;
 import org.flowable.bpmn.model.FlowNode;
+import org.flowable.bpmn.model.Gateway;
 import org.flowable.bpmn.model.GraphicInfo;
 import org.flowable.bpmn.model.Process;
 import org.flowable.bpmn.model.SequenceFlow;
@@ -541,6 +542,7 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
                 .elementName(node.getName())
                 .elementType(node.getClass().getSimpleName())
                 .documentation(StringUtils.hasText(node.getDocumentation()) ? node.getDocumentation() : null)
+                .defaultFlowId(node instanceof Gateway gateway ? gateway.getDefaultFlow() : null)
                 .x(graphicInfo == null ? null : graphicInfo.getX())
                 .y(graphicInfo == null ? null : graphicInfo.getY())
                 .width(graphicInfo == null ? null : graphicInfo.getWidth())

@@ -688,6 +688,7 @@ window.ModelCenter = {
                         elementName: child.getAttribute("name") || "",
                         elementType: supportedNodeTypes[localName],
                         documentation: this.extractDocumentation(child),
+                        defaultFlowId: child.getAttribute("default") || "",
                         x: this.toNumber(bounds.x, nodes.length * 180),
                         y: this.toNumber(bounds.y, 0),
                         width: this.toNumber(bounds.width, isEventNode ? 56 : 120),
@@ -707,6 +708,7 @@ window.ModelCenter = {
                         elementName: child.getAttribute("name") || "",
                         sourceRef: child.getAttribute("sourceRef") || "",
                         targetRef: child.getAttribute("targetRef") || "",
+                        conditionExpression: this.extractConditionExpression(child),
                         waypoints: edgeWaypointMap[flowId] || []
                     });
                 }
@@ -730,6 +732,10 @@ window.ModelCenter = {
         extractDocumentation: function (element) {
             var documentation = this.findFirstElementByLocalName(element, "documentation");
             return documentation && documentation.textContent ? documentation.textContent.trim() : "";
+        },
+        extractConditionExpression: function (element) {
+            var conditionExpression = this.findFirstElementByLocalName(element, "conditionExpression");
+            return conditionExpression && conditionExpression.textContent ? conditionExpression.textContent.trim() : "";
         },
         toNumber: function (value, fallback) {
             var nextValue = Number(value);
