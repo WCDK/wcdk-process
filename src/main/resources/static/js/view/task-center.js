@@ -151,7 +151,7 @@ window.TaskCenter = {
                 <el-dialog
                     title="流程图"
                     :visible.sync="detailDialogVisible"
-                    width="1100px"
+                    width="2000px"
                     top="5vh"
                     @opened="renderTaskDetailDiagram"
                     @closed="handleDetailDialogClosed">

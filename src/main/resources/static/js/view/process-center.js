@@ -508,7 +508,7 @@ window.ProcessCenter = {
                         <el-dialog
                             title="流程图"
                             :visible.sync="processDetailDialogVisible"
-                            width="1100px"
+                            width="2000px"
                             top="5vh"
                             @opened="renderProcessCanvas"
                             @closed="handleProcessDetailDialogClosed">

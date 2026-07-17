@@ -13,6 +13,8 @@ public class ProcessDiagramNodeResponse {
 
     private String elementType;
 
+    private String parentId;
+
     private String documentation;
 
     private String defaultFlowId;

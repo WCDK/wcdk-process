@@ -612,7 +612,7 @@ window.ModelCenter = {
                 parallelGateway: "ParallelGateway",
                 inclusiveGateway: "InclusiveGateway"
             };
-            this.collectPreviewFlowElements(processElement, shapeMap, edgeWaypointMap, supportedNodeTypes, nodes, sequenceFlows);
+            this.collectPreviewFlowElements(processElement, shapeMap, edgeWaypointMap, supportedNodeTypes, nodes, sequenceFlows, "");
             var nodeMap = {};
             for (var nodeIndex = 0; nodeIndex < nodes.length; nodeIndex += 1) {
                 nodeMap[nodes[nodeIndex].elementId] = nodes[nodeIndex];
@@ -674,7 +674,7 @@ window.ModelCenter = {
             }
             return result;
         },
-        collectPreviewFlowElements: function (containerElement, shapeMap, edgeWaypointMap, supportedNodeTypes, nodes, sequenceFlows) {
+        collectPreviewFlowElements: function (containerElement, shapeMap, edgeWaypointMap, supportedNodeTypes, nodes, sequenceFlows, parentId) {
             var children = containerElement && containerElement.children ? containerElement.children : [];
             for (var index = 0; index < children.length; index += 1) {
                 var child = children[index];
@@ -687,6 +687,7 @@ window.ModelCenter = {
                         elementId: elementId,
                         elementName: child.getAttribute("name") || "",
                         elementType: supportedNodeTypes[localName],
+                        parentId: parentId || "",
                         documentation: this.extractDocumentation(child),
                         defaultFlowId: child.getAttribute("default") || "",
                         x: this.toNumber(bounds.x, nodes.length * 180),
@@ -697,7 +698,7 @@ window.ModelCenter = {
                         outgoingCount: 0
                     });
                     if (localName === "subProcess") {
-                        this.collectPreviewFlowElements(child, shapeMap, edgeWaypointMap, supportedNodeTypes, nodes, sequenceFlows);
+                        this.collectPreviewFlowElements(child, shapeMap, edgeWaypointMap, supportedNodeTypes, nodes, sequenceFlows, elementId);
                     }
                     continue;
                 }

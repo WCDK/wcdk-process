@@ -42,6 +42,7 @@ window.ProcessDiagram = {
                         ref="canvas"
                         @mousemove="handleCanvasMouseMove"
                         @mouseleave="handleCanvasMouseLeave"
+                        @mousedown="handleCanvasMouseDown"
                         @click="handleCanvasClick"
                         class="process-diagram-canvas">
                     </canvas>
@@ -108,7 +109,24 @@ window.ProcessDiagram = {
             hoverPath: {
                 nodeIds: [],
                 edgeIds: []
-            }
+            },
+            expandedSubProcessMap: {},
+            nodeDragState: {
+                active: false,
+                mode: "",
+                nodeId: "",
+                startPointerX: 0,
+                startPointerY: 0,
+                startOffsetX: 0,
+                startOffsetY: 0,
+                startNodeX: 0,
+                startNodeY: 0,
+                startWidth: 0,
+                startHeight: 0,
+                moved: false,
+                childOffsets: []
+            },
+            suppressCanvasClick: false
         };
     },
     computed: {
@@ -175,7 +193,12 @@ window.ProcessDiagram = {
             if (!canvas || !detail || !Array.isArray(detail.nodes) || !detail.nodes.length) {
                 return;
             }
-            var nodes = detail.nodes.slice();
+            var view = this.buildDiagramView(detail);
+            var nodes = view.nodes;
+            var sequenceFlows = view.sequenceFlows;
+            if (!nodes.length) {
+                return;
+            }
             var padding = 48;
             var minX = Number.MAX_SAFE_INTEGER;
             var minY = Number.MAX_SAFE_INTEGER;
@@ -216,10 +239,79 @@ window.ProcessDiagram = {
             }
             this.drawCanvasBackground(context, logicalWidth, logicalHeight);
             this.drawSubProcessContainers(context, nodes, minX, minY, padding, activeNodeIds || []);
-            this.drawProcessEdges(context, detail.sequenceFlows || [], nodes, minX, minY, padding, activeNodeIds || []);
+            this.drawProcessEdges(context, sequenceFlows, nodes, minX, minY, padding, activeNodeIds || []);
             this.drawProcessNodes(context, nodes, minX, minY, padding, activeNodeIds || []);
         },
+        buildDiagramView: function (detail) {
+            var allNodes = Array.isArray(detail.nodes) ? detail.nodes.slice() : [];
+            var allSequenceFlows = Array.isArray(detail.sequenceFlows) ? detail.sequenceFlows : [];
+            var nodeMap = {};
+            var visibleNodeMap = {};
+            var visibleNodes = [];
+            var visibleSequenceFlows = [];
+            for (var nodeIndex = 0; nodeIndex < allNodes.length; nodeIndex += 1) {
+                if (allNodes[nodeIndex] && allNodes[nodeIndex].elementId) {
+                    nodeMap[allNodes[nodeIndex].elementId] = allNodes[nodeIndex];
+                }
+            }
+            for (var visibleIndex = 0; visibleIndex < allNodes.length; visibleIndex += 1) {
+                var node = allNodes[visibleIndex];
+                if (this.isDiagramNodeVisible(node, nodeMap)) {
+                    visibleNodes.push(node);
+                    visibleNodeMap[node.elementId] = true;
+                }
+            }
+            for (var edgeIndex = 0; edgeIndex < allSequenceFlows.length; edgeIndex += 1) {
+                var edge = allSequenceFlows[edgeIndex];
+                if (visibleNodeMap[edge.sourceRef] && visibleNodeMap[edge.targetRef]) {
+                    visibleSequenceFlows.push(edge);
+                }
+            }
+            return {
+                nodes: visibleNodes,
+                sequenceFlows: visibleSequenceFlows
+            };
+        },
+        isDiagramNodeVisible: function (node, nodeMap) {
+            if (!node || !node.elementId) {
+                return false;
+            }
+            var parentId = node.parentId || "";
+            var guard = 0;
+            while (parentId && guard < 100) {
+                var parentNode = nodeMap[parentId];
+                if (!parentNode || parentNode.elementType !== "SubProcess" || !this.isSubProcessExpanded(parentId)) {
+                    return false;
+                }
+                parentId = parentNode.parentId || "";
+                guard += 1;
+            }
+            return true;
+        },
+        isSubProcessExpanded: function (nodeId) {
+            return !!(nodeId && this.expandedSubProcessMap[nodeId]);
+        },
+        toggleSubProcess: function (node) {
+            if (!node || node.elementType !== "SubProcess") {
+                return;
+            }
+            var nodeId = node.elementId || "";
+            if (!nodeId) {
+                return;
+            }
+            if (this.$set) {
+                this.$set(this.expandedSubProcessMap, nodeId, !this.isSubProcessExpanded(nodeId));
+            } else {
+                this.expandedSubProcessMap[nodeId] = !this.isSubProcessExpanded(nodeId);
+            }
+            this.clearHoverPath(false);
+            this.hideTooltip();
+            this.renderCanvas();
+        },
         handleCanvasMouseMove: function (event) {
+            if (this.nodeDragState.active) {
+                return;
+            }
             var wrapper = this.$refs.canvasWrapper;
             if (!wrapper || !this.renderedNodes.length) {
                 return;
@@ -250,22 +342,126 @@ window.ProcessDiagram = {
             this.hideTooltip();
         },
         handleCanvasClick: function (event) {
+            if (this.suppressCanvasClick) {
+                this.suppressCanvasClick = false;
+                return;
+            }
             var node = this.resolveNodeFromCanvasEvent(event);
             if (!node) {
+                return;
+            }
+            if (node.elementType === "SubProcess") {
+                this.toggleSubProcess(node);
                 return;
             }
             this.selectedNode = node;
             this.nodeDetailVisible = true;
         },
+        handleCanvasMouseDown: function (event) {
+            if (!event || event.button !== 0) {
+                return;
+            }
+            var point = this.resolveCanvasOffset(event);
+            var node = this.findNodeAtPosition(point.offsetX, point.offsetY);
+            if (!node) {
+                return;
+            }
+            event.preventDefault();
+            var bounds = this.resolveNodeBounds(node, this.canvasViewport.minX, this.canvasViewport.minY, this.canvasViewport.padding);
+            if (node.elementType === "SubProcess" && this.isPointInsideSubProcessToggle(point.offsetX, point.offsetY, bounds)) {
+                return;
+            }
+            var pointer = this.resolveDiagramPointer(event);
+            var mode = this.isPointInsideResizeHandle(point.offsetX, point.offsetY, bounds) ? "resize" : "move";
+            this.clearHoverPath(true);
+            this.hideTooltip();
+            this.nodeDragState = {
+                active: true,
+                mode: mode,
+                nodeId: node.elementId || "",
+                startPointerX: pointer.x,
+                startPointerY: pointer.y,
+                startOffsetX: point.offsetX,
+                startOffsetY: point.offsetY,
+                startNodeX: typeof node.x === "number" ? node.x : 0,
+                startNodeY: typeof node.y === "number" ? node.y : 0,
+                startWidth: typeof node.width === "number" ? node.width : 132,
+                startHeight: typeof node.height === "number" ? node.height : 64,
+                moved: false,
+                childOffsets: node.elementType === "SubProcess" ? this.buildChildOffsetSnapshot(node) : []
+            };
+        },
+        handleDocumentMouseMove: function (event) {
+            if (!this.nodeDragState.active) {
+                return;
+            }
+            var node = this.findNodeByElementId(this.nodeDragState.nodeId);
+            if (!node) {
+                return;
+            }
+            var point = this.resolveCanvasOffset(event);
+            var deltaX = point.offsetX - this.nodeDragState.startOffsetX;
+            var deltaY = point.offsetY - this.nodeDragState.startOffsetY;
+            if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) {
+                this.nodeDragState.moved = true;
+            }
+            if (this.nodeDragState.mode === "resize") {
+                node.width = Math.max(this.resolveMinimumNodeWidth(node), Math.round(this.nodeDragState.startWidth + deltaX));
+                node.height = Math.max(this.resolveMinimumNodeHeight(node), Math.round(this.nodeDragState.startHeight + deltaY));
+            } else {
+                node.x = Math.max(0, Math.round(this.nodeDragState.startNodeX + deltaX));
+                node.y = Math.max(0, Math.round(this.nodeDragState.startNodeY + deltaY));
+                if (node.elementType === "SubProcess") {
+                    this.moveChildNodesWithParent(node);
+                }
+            }
+            this.renderCanvas(true);
+        },
+        handleDocumentMouseUp: function () {
+            if (!this.nodeDragState.active) {
+                return;
+            }
+            this.suppressCanvasClick = !!this.nodeDragState.moved;
+            this.nodeDragState = {
+                active: false,
+                mode: "",
+                nodeId: "",
+                startPointerX: 0,
+                startPointerY: 0,
+                startOffsetX: 0,
+                startOffsetY: 0,
+                startNodeX: 0,
+                startNodeY: 0,
+                startWidth: 0,
+                startHeight: 0,
+                moved: false,
+                childOffsets: []
+            };
+        },
         resolveNodeFromCanvasEvent: function (event) {
-            var wrapper = this.$refs.canvasWrapper;
-            if (!wrapper || !this.renderedNodes.length) {
+            if (!this.renderedNodes.length) {
                 return null;
             }
+            var point = this.resolveCanvasOffset(event);
+            return this.findNodeAtPosition(point.offsetX, point.offsetY);
+        },
+        resolveCanvasOffset: function (event) {
+            var wrapper = this.$refs.canvasWrapper;
+            if (!wrapper) {
+                return { offsetX: 0, offsetY: 0 };
+            }
             var wrapperRect = wrapper.getBoundingClientRect();
-            var offsetX = event.clientX - wrapperRect.left + wrapper.scrollLeft - 10;
-            var offsetY = event.clientY - wrapperRect.top + wrapper.scrollTop - 10;
-            return this.findNodeAtPosition(offsetX, offsetY);
+            return {
+                offsetX: event.clientX - wrapperRect.left + wrapper.scrollLeft - 10,
+                offsetY: event.clientY - wrapperRect.top + wrapper.scrollTop - 10
+            };
+        },
+        resolveDiagramPointer: function (event) {
+            var point = this.resolveCanvasOffset(event);
+            return {
+                x: point.offsetX + this.canvasViewport.minX - this.canvasViewport.padding,
+                y: point.offsetY + this.canvasViewport.minY - this.canvasViewport.padding
+            };
         },
         hideTooltip: function () {
             this.hoverTooltip.visible = false;
@@ -348,8 +544,21 @@ window.ProcessDiagram = {
             this.hoverTooltip.transform = "translate(" + transformX + "px," + transformY + "px)";
         },
         findNodeAtPosition: function (offsetX, offsetY) {
+            for (var leafIndex = this.renderedNodes.length - 1; leafIndex >= 0; leafIndex -= 1) {
+                var leafNode = this.renderedNodes[leafIndex];
+                if (leafNode.elementType === "SubProcess") {
+                    continue;
+                }
+                var leafBounds = this.resolveNodeBounds(leafNode, this.canvasViewport.minX, this.canvasViewport.minY, this.canvasViewport.padding);
+                if (this.isPointInsideNode(offsetX, offsetY, leafBounds, leafNode.elementType)) {
+                    return leafNode;
+                }
+            }
             for (var i = this.renderedNodes.length - 1; i >= 0; i -= 1) {
                 var node = this.renderedNodes[i];
+                if (node.elementType !== "SubProcess") {
+                    continue;
+                }
                 var bounds = this.resolveNodeBounds(node, this.canvasViewport.minX, this.canvasViewport.minY, this.canvasViewport.padding);
                 if (this.isPointInsideNode(offsetX, offsetY, bounds, node.elementType)) {
                     return node;
@@ -382,6 +591,95 @@ window.ProcessDiagram = {
                 return normalizedX + normalizedY <= 1;
             }
             return pointX >= bounds.x && pointX <= bounds.x + bounds.width && pointY >= bounds.y && pointY <= bounds.y + bounds.height;
+        },
+        isPointInsideResizeHandle: function (pointX, pointY, bounds) {
+            var size = 16;
+            return pointX >= bounds.x + bounds.width - size
+                && pointX <= bounds.x + bounds.width + 4
+                && pointY >= bounds.y + bounds.height - size
+                && pointY <= bounds.y + bounds.height + 4;
+        },
+        isPointInsideSubProcessToggle: function (pointX, pointY, bounds) {
+            var centerX = bounds.x + bounds.width - 18;
+            var centerY = bounds.y + 18;
+            var dx = pointX - centerX;
+            var dy = pointY - centerY;
+            return dx * dx + dy * dy <= 14 * 14;
+        },
+        findNodeByElementId: function (nodeId) {
+            var nodes = this.detail && Array.isArray(this.detail.nodes) ? this.detail.nodes : [];
+            for (var index = 0; index < nodes.length; index += 1) {
+                if (nodes[index].elementId === nodeId) {
+                    return nodes[index];
+                }
+            }
+            return null;
+        },
+        getDescendantNodes: function (parentId) {
+            var nodes = this.detail && Array.isArray(this.detail.nodes) ? this.detail.nodes : [];
+            var result = [];
+            for (var index = 0; index < nodes.length; index += 1) {
+                if (this.isNodeDescendantOf(nodes[index], parentId)) {
+                    result.push(nodes[index]);
+                }
+            }
+            return result;
+        },
+        isNodeDescendantOf: function (node, parentId) {
+            if (!node || !parentId) {
+                return false;
+            }
+            var currentParentId = node.parentId || "";
+            var guard = 0;
+            while (currentParentId && guard < 100) {
+                if (currentParentId === parentId) {
+                    return true;
+                }
+                var parentNode = this.findNodeByElementId(currentParentId);
+                currentParentId = parentNode ? (parentNode.parentId || "") : "";
+                guard += 1;
+            }
+            return false;
+        },
+        buildChildOffsetSnapshot: function (parentNode) {
+            var result = [];
+            var descendants = this.getDescendantNodes(parentNode.elementId);
+            for (var index = 0; index < descendants.length; index += 1) {
+                result.push({
+                    nodeId: descendants[index].elementId,
+                    offsetX: (typeof descendants[index].x === "number" ? descendants[index].x : 0) - (typeof parentNode.x === "number" ? parentNode.x : 0),
+                    offsetY: (typeof descendants[index].y === "number" ? descendants[index].y : 0) - (typeof parentNode.y === "number" ? parentNode.y : 0)
+                });
+            }
+            return result;
+        },
+        moveChildNodesWithParent: function (parentNode) {
+            var offsets = this.nodeDragState.childOffsets || [];
+            for (var index = 0; index < offsets.length; index += 1) {
+                var childNode = this.findNodeByElementId(offsets[index].nodeId);
+                if (childNode) {
+                    childNode.x = Math.max(0, Math.round((typeof parentNode.x === "number" ? parentNode.x : 0) + offsets[index].offsetX));
+                    childNode.y = Math.max(0, Math.round((typeof parentNode.y === "number" ? parentNode.y : 0) + offsets[index].offsetY));
+                }
+            }
+        },
+        resolveMinimumNodeWidth: function (node) {
+            if (node.elementType === "StartEvent" || node.elementType === "EndEvent") {
+                return 36;
+            }
+            if (node.elementType === "SubProcess") {
+                return 160;
+            }
+            return 80;
+        },
+        resolveMinimumNodeHeight: function (node) {
+            if (node.elementType === "StartEvent" || node.elementType === "EndEvent") {
+                return 36;
+            }
+            if (node.elementType === "SubProcess") {
+                return 90;
+            }
+            return 44;
         },
         buildHoverPath: function (nodeId) {
             var detail = this.detail || {};
@@ -505,38 +803,27 @@ window.ProcessDiagram = {
                 context.strokeStyle = isHoverEdge ? "#f97316" : (isActiveEdge ? "#22c55e" : "#8fa3bf");
                 context.shadowColor = isHoverEdge ? "rgba(249,115,22,0.32)" : (isActiveEdge ? "rgba(34,197,94,0.24)" : "rgba(15,23,42,0.08)");
                 context.shadowBlur = isHoverEdge ? 16 : (isActiveEdge ? 12 : 4);
-                if (Array.isArray(edge.waypoints) && edge.waypoints.length >= 2) {
-                    var normalizedWaypoints = this.normalizeEdgeWaypoints(edge.waypoints, minX, minY, padding);
-                    this.drawEdgePathByWaypoints(context, normalizedWaypoints);
-                    var lastPoint = normalizedWaypoints[normalizedWaypoints.length - 1];
-                    this.drawArrowHead(context, lastPoint.x, lastPoint.y, isHoverEdge ? "#f97316" : (isActiveEdge ? "#22c55e" : "#8fa3bf"));
-                } else {
-                    var startPoint = this.resolveExitPoint(sourceNode, minX, minY, padding);
-                    var endPoint = this.resolveEntryPoint(targetNode, minX, minY, padding);
-                    var turnOffset = Math.max(28, Math.min(54, Math.abs(endPoint.x - startPoint.x) / 2));
-                    var midX = startPoint.x + turnOffset;
-                    var endTurnX = endPoint.x - turnOffset;
-                    context.beginPath();
-                    context.moveTo(startPoint.x, startPoint.y);
-                    if (endPoint.x <= startPoint.x + 24) {
-                        var detourX = startPoint.x + 28;
-                        context.lineTo(detourX, startPoint.y);
-                        context.quadraticCurveTo(detourX + 10, startPoint.y, detourX + 10, startPoint.y + (endPoint.y > startPoint.y ? 10 : -10));
-                        context.lineTo(detourX + 10, endPoint.y - (endPoint.y > startPoint.y ? 10 : -10));
-                        context.quadraticCurveTo(detourX + 10, endPoint.y, detourX + 20, endPoint.y);
-                        context.lineTo(endPoint.x, endPoint.y);
-                    } else {
-                        context.lineTo(midX - 10, startPoint.y);
-                        context.quadraticCurveTo(midX, startPoint.y, midX, startPoint.y + (endPoint.y > startPoint.y ? 10 : -10));
-                        context.lineTo(endTurnX, endPoint.y - (endPoint.y > startPoint.y ? 10 : -10));
-                        context.quadraticCurveTo(endTurnX, endPoint.y, endTurnX + 10, endPoint.y);
-                        context.lineTo(endPoint.x, endPoint.y);
-                    }
-                    context.stroke();
-                    this.drawArrowHead(context, endPoint.x, endPoint.y, isHoverEdge ? "#f97316" : (isActiveEdge ? "#22c55e" : "#8fa3bf"));
-                }
+                var startPoint = this.resolveExitPoint(sourceNode, minX, minY, padding);
+                var endPoint = this.resolveEntryPoint(targetNode, minX, minY, padding);
+                this.drawDesignerLikeEdgePath(context, startPoint, endPoint);
+                this.drawArrowHead(context, endPoint.x, endPoint.y, isHoverEdge ? "#f97316" : (isActiveEdge ? "#22c55e" : "#8fa3bf"));
                 context.restore();
             }
+        },
+        drawDesignerLikeEdgePath: function (context, startPoint, endPoint) {
+            var turnOffset = Math.max(36, Math.min(84, Math.abs(endPoint.x - startPoint.x) / 2));
+            var midX = startPoint.x + turnOffset;
+            var endTurnX = endPoint.x - turnOffset;
+            if (endPoint.x <= startPoint.x + 24) {
+                midX = startPoint.x + 40;
+                endTurnX = endPoint.x - 40;
+            }
+            context.beginPath();
+            context.moveTo(startPoint.x, startPoint.y);
+            context.lineTo(midX, startPoint.y);
+            context.lineTo(endTurnX, endPoint.y);
+            context.lineTo(endPoint.x, endPoint.y);
+            context.stroke();
         },
         drawSubProcessContainers: function (context, nodes, minX, minY, padding, activeNodeIds) {
             if (!nodes || !nodes.length) {
@@ -571,7 +858,55 @@ window.ProcessDiagram = {
                 context.stroke();
                 context.restore();
                 this.drawNodeText(context, node, x, y, width, height, theme, isActive || isHoverPathNode);
+                this.drawSubProcessToggle(context, node, x, y, width);
+                this.drawResizeHandle(context, x, y, width, height);
             }
+        },
+        drawSubProcessToggle: function (context, node, x, y, width) {
+            var size = 22;
+            var centerX = x + width - 18;
+            var centerY = y + 18;
+            context.save();
+            context.fillStyle = "#ffffff";
+            context.strokeStyle = "#7c93b6";
+            context.lineWidth = 1.5;
+            context.beginPath();
+            context.arc(centerX, centerY, size / 2, 0, Math.PI * 2);
+            context.fill();
+            context.stroke();
+            context.fillStyle = "#334155";
+            context.font = "700 16px Microsoft YaHei";
+            context.textAlign = "center";
+            context.textBaseline = "middle";
+            context.fillText(this.isSubProcessExpanded(node.elementId) ? "-" : "+", centerX, centerY - 1);
+            context.restore();
+        },
+        drawResizeHandle: function (context, x, y, width, height) {
+            var handleX = x + width - 13;
+            var handleY = y + height - 13;
+            context.save();
+            context.fillStyle = "rgba(255,255,255,0.92)";
+            context.strokeStyle = "rgba(100,116,139,0.62)";
+            context.lineWidth = 1;
+            context.beginPath();
+            context.moveTo(handleX + 4, handleY);
+            context.lineTo(handleX + 13, handleY);
+            context.lineTo(handleX + 13, handleY + 9);
+            context.quadraticCurveTo(handleX + 13, handleY + 13, handleX + 9, handleY + 13);
+            context.lineTo(handleX, handleY + 13);
+            context.lineTo(handleX, handleY + 4);
+            context.quadraticCurveTo(handleX, handleY, handleX + 4, handleY);
+            context.closePath();
+            context.fill();
+            context.stroke();
+            context.strokeStyle = "rgba(71,85,105,0.72)";
+            context.beginPath();
+            context.moveTo(handleX + 5, handleY + 10);
+            context.lineTo(handleX + 10, handleY + 5);
+            context.moveTo(handleX + 8, handleY + 11);
+            context.lineTo(handleX + 11, handleY + 8);
+            context.stroke();
+            context.restore();
         },
         normalizeEdgeWaypoints: function (waypoints, minX, minY, padding) {
             var result = [];
@@ -662,6 +997,7 @@ window.ProcessDiagram = {
                 context.stroke();
                 context.restore();
                 this.drawNodeText(context, node, x, y, width, height, theme, isActive || isHoverPathNode);
+                this.drawResizeHandle(context, x, y, width, height);
             }
         },
         createNodeGradient: function (context, x, y, width, height, fillStart, fillEnd) {
@@ -1008,10 +1344,15 @@ window.ProcessDiagram = {
     mounted: function () {
         this.ensureStyle();
         window.addEventListener("resize", this.handleResize);
+        document.addEventListener("mousemove", this.handleDocumentMouseMove);
+        document.addEventListener("mouseup", this.handleDocumentMouseUp);
         this.renderCanvas();
     },
     beforeDestroy: function () {
         window.removeEventListener("resize", this.handleResize);
+        document.removeEventListener("mousemove", this.handleDocumentMouseMove);
+        document.removeEventListener("mouseup", this.handleDocumentMouseUp);
+        this.handleDocumentMouseUp();
         this.clearHoverPath(false);
         this.hideTooltip();
     }
@@ -1054,7 +1395,7 @@ window.ProcessDiagramUtils = {
             eventBasedGateway: "EventGateway",
             textAnnotation: "TextAnnotation"
         };
-        this.collectPreviewFlowElements(processElement, shapeMap, edgeWaypointMap, supportedNodeTypes, nodes, sequenceFlows);
+        this.collectPreviewFlowElements(processElement, shapeMap, edgeWaypointMap, supportedNodeTypes, nodes, sequenceFlows, "");
         var nodeMap = {};
         for (var nodeIndex = 0; nodeIndex < nodes.length; nodeIndex += 1) {
             nodeMap[nodes[nodeIndex].elementId] = nodes[nodeIndex];
@@ -1116,7 +1457,7 @@ window.ProcessDiagramUtils = {
         }
         return result;
     },
-    collectPreviewFlowElements: function (containerElement, shapeMap, edgeWaypointMap, supportedNodeTypes, nodes, sequenceFlows) {
+    collectPreviewFlowElements: function (containerElement, shapeMap, edgeWaypointMap, supportedNodeTypes, nodes, sequenceFlows, parentId) {
         var children = containerElement && containerElement.children ? containerElement.children : [];
         for (var index = 0; index < children.length; index += 1) {
             var child = children[index];
@@ -1129,6 +1470,7 @@ window.ProcessDiagramUtils = {
                     elementId: elementId,
                     elementName: child.getAttribute("name") || "",
                     elementType: supportedNodeTypes[localName],
+                    parentId: parentId || "",
                     documentation: this.extractDocumentation(child),
                     properties: this.extractNodeProperties(child, localName),
                     defaultFlowId: child.getAttribute("default") || "",
@@ -1140,7 +1482,7 @@ window.ProcessDiagramUtils = {
                     outgoingCount: 0
                 });
                 if (localName === "subProcess") {
-                    this.collectPreviewFlowElements(child, shapeMap, edgeWaypointMap, supportedNodeTypes, nodes, sequenceFlows);
+                    this.collectPreviewFlowElements(child, shapeMap, edgeWaypointMap, supportedNodeTypes, nodes, sequenceFlows, elementId);
                 }
                 continue;
             }

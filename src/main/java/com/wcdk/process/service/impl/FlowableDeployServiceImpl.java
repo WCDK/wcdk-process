@@ -191,12 +191,13 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
                 .singleResult();
         BpmnModel bpmnModel = repositoryService.getBpmnModel(processDefinitionId);
         Process process = bpmnModel == null ? null : bpmnModel.getMainProcess();
+        Map<String, String> nodeParentMap = process == null ? Map.of() : buildFlowNodeParentMap(process, "");
         List<ProcessDiagramNodeResponse> nodes = process == null ? List.of() : collectFlowNodes(process)
                 .stream()
                 .sorted(Comparator
                         .comparing((FlowNode node) -> resolveNodeX(bpmnModel, node.getId()))
                         .thenComparing(node -> resolveNodeY(bpmnModel, node.getId())))
-                .map(node -> buildNodeResponse(bpmnModel, node))
+                .map(node -> buildNodeResponse(bpmnModel, node, nodeParentMap.get(node.getId())))
                 .toList();
         List<ProcessDiagramEdgeResponse> sequenceFlows = process == null ? List.of() : collectSequenceFlows(process)
                 .stream()
@@ -535,14 +536,15 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
                 ));
     }
 
-    private ProcessDiagramNodeResponse buildNodeResponse(BpmnModel bpmnModel, FlowNode node) {
+    private ProcessDiagramNodeResponse buildNodeResponse(BpmnModel bpmnModel, FlowNode node, String parentId) {
         GraphicInfo graphicInfo = bpmnModel == null ? null : bpmnModel.getGraphicInfo(node.getId());
         return ProcessDiagramNodeResponse.builder()
                 .elementId(node.getId())
                 .elementName(node.getName())
                 .elementType(node.getClass().getSimpleName())
+                .parentId(StringUtils.hasText(parentId) ? parentId : null)
                 .documentation(StringUtils.hasText(node.getDocumentation()) ? node.getDocumentation() : null)
-                .defaultFlowId(node instanceof Gateway gateway ? gateway.getDefaultFlow() : null)
+                .defaultFlowId(node instanceof Gateway ? ((Gateway) node).getDefaultFlow() : null)
                 .x(graphicInfo == null ? null : graphicInfo.getX())
                 .y(graphicInfo == null ? null : graphicInfo.getY())
                 .width(graphicInfo == null ? null : graphicInfo.getWidth())
@@ -596,14 +598,30 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
             return nodes;
         }
         for (FlowElement flowElement : container.getFlowElements()) {
-            if (flowElement instanceof FlowNode flowNode) {
-                nodes.add(flowNode);
+            if (flowElement instanceof FlowNode) {
+                nodes.add((FlowNode) flowElement);
             }
-            if (flowElement instanceof FlowElementsContainer childContainer) {
-                nodes.addAll(collectFlowNodes(childContainer));
+            if (flowElement instanceof FlowElementsContainer) {
+                nodes.addAll(collectFlowNodes((FlowElementsContainer) flowElement));
             }
         }
         return nodes;
+    }
+
+    private Map<String, String> buildFlowNodeParentMap(FlowElementsContainer container, String parentId) {
+        Map<String, String> result = new LinkedHashMap<>();
+        if (container == null || container.getFlowElements() == null) {
+            return result;
+        }
+        for (FlowElement flowElement : container.getFlowElements()) {
+            if (flowElement instanceof FlowNode) {
+                result.put(((FlowNode) flowElement).getId(), parentId);
+            }
+            if (flowElement instanceof FlowElementsContainer) {
+                result.putAll(buildFlowNodeParentMap((FlowElementsContainer) flowElement, flowElement.getId()));
+            }
+        }
+        return result;
     }
 
     private List<SequenceFlow> collectSequenceFlows(FlowElementsContainer container) {
@@ -612,11 +630,11 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
             return sequenceFlows;
         }
         for (FlowElement flowElement : container.getFlowElements()) {
-            if (flowElement instanceof SequenceFlow sequenceFlow) {
-                sequenceFlows.add(sequenceFlow);
+            if (flowElement instanceof SequenceFlow) {
+                sequenceFlows.add((SequenceFlow) flowElement);
             }
-            if (flowElement instanceof FlowElementsContainer childContainer) {
-                sequenceFlows.addAll(collectSequenceFlows(childContainer));
+            if (flowElement instanceof FlowElementsContainer) {
+                sequenceFlows.addAll(collectSequenceFlows((FlowElementsContainer) flowElement));
             }
         }
         return sequenceFlows;
