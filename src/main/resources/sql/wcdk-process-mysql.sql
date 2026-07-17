@@ -208,8 +208,15 @@ INSERT INTO `SYS_PERMISSION` (`ID`, `PARENT_ID`, `PERMISSION_CODE`, `PERMISSION_
 (1160, 1106, 'task:delete', '删除任务', 'BUTTON', NULL, 13, 1, '删除任务', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
 (1161, 1128, 'client:refresh', '刷新客户端', 'BUTTON', NULL, 10, 1, '刷新客户端数据', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
 (1162, 1128, 'client:detect', '检测客户端', 'BUTTON', NULL, 11, 1, '检测客户端存活状态', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-(1163, 1105, 'process:status:tag', '流程状态', 'TAG', NULL, 30, 1, '流程中心状态资源', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+(1163, 1105, 'process:status:tag', '流程状态', 'TAG', NULL, 30, 1, '流程中心状态资源', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(1164, 1104, 'designer:export:bpmn', '导出 BPMN', 'BUTTON', NULL, 10, 1, '导出 BPMN 文件', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(1165, 1104, 'designer:export:bpmn-xml', '导出 BPMN.XML', 'BUTTON', NULL, 11, 1, '导出 BPMN.XML 文件', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(1166, 1104, 'designer:export:png', '导出 PNG', 'BUTTON', NULL, 12, 1, '导出 PNG 图片', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(1167, 1104, 'designer:canvas:center', '居中显示', 'BUTTON', NULL, 13, 1, '将画布内容居中显示', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(1168, 1104, 'designer:canvas:reset', '清空画布', 'BUTTON', NULL, 14, 1, '清空画布内容', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(1169, 1104, 'designer:canvas:refresh', '刷新画布', 'BUTTON', NULL, 15, 1, '刷新画布内容', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
+INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID, CREATE_TIME)
 INSERT INTO `SYS_USER_ROLE` (`USER_ID`, `ROLE_ID`, `CREATE_TIME`)
 VALUES (1001, 1001, CURRENT_TIMESTAMP);
 

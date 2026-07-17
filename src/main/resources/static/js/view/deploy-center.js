@@ -126,7 +126,6 @@ window.DeployCenter = {
                                 </el-form-item>
                             </el-form>
                         </div>
-
                             <el-table
                                 :data="pagedDeployments"
                                 stripe
@@ -169,7 +168,6 @@ window.DeployCenter = {
                                     </template>
                                 </el-table-column>
                             </el-table>
-
                             <div class="process-pagination">
                                 <el-pagination
                                     background

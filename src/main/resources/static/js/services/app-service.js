@@ -7,6 +7,18 @@
     var TOKEN_KEY = "wcdk_process_token";
     var USER_KEY = "wcdk_process_current_user";
 
+    function getSessionStorage() {
+        return window.sessionStorage || window.localStorage;
+    }
+
+    function clearLegacyAuth() {
+        if (getSessionStorage() === window.localStorage) {
+            return;
+        }
+        window.localStorage.removeItem(TOKEN_KEY);
+        window.localStorage.removeItem(USER_KEY);
+    }
+
     async function readResponseBody(response) {
         var contentType = response.headers.get("Content-Type") || "";
         if (contentType.indexOf("application/json") >= 0) {
@@ -32,19 +44,21 @@
     }
 
     function getToken() {
-        return window.localStorage.getItem(TOKEN_KEY) || "";
+        return getSessionStorage().getItem(TOKEN_KEY) || window.localStorage.getItem(TOKEN_KEY) || "";
     }
 
     function setToken(token) {
         if (token) {
-            window.localStorage.setItem(TOKEN_KEY, token);
+            getSessionStorage().setItem(TOKEN_KEY, token);
+            clearLegacyAuth();
             return;
         }
+        getSessionStorage().removeItem(TOKEN_KEY);
         window.localStorage.removeItem(TOKEN_KEY);
     }
 
     function getCurrentUserCache() {
-        var raw = window.localStorage.getItem(USER_KEY);
+        var raw = getSessionStorage().getItem(USER_KEY) || window.localStorage.getItem(USER_KEY);
         if (!raw) {
             return null;
         }
@@ -57,9 +71,11 @@
 
     function setCurrentUserCache(currentUser) {
         if (currentUser) {
-            window.localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
+            getSessionStorage().setItem(USER_KEY, JSON.stringify(currentUser));
+            clearLegacyAuth();
             return;
         }
+        getSessionStorage().removeItem(USER_KEY);
         window.localStorage.removeItem(USER_KEY);
     }
 

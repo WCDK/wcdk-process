@@ -15,12 +15,12 @@ window.ProcessDesigner = {
                         <h2>流程设计</h2>
                     </div>
                     <div class="designer-header-actions">
-                        <el-button @click="handleExportBpmn">导出 BPMN</el-button>
-                        <el-button @click="handleExportBpmnXml">导出 BPMN.XML</el-button>
-                        <el-button @click="handleExportPng">导出 PNG</el-button>
-                        <el-button @click="handleCenterCanvas">居中显示</el-button>
-                        <el-button @click="handleResetCanvas">清空画布</el-button>
-                        <el-button type="primary" @click="handleRefresh">刷新画布</el-button>
+                        <el-button v-if="hasButton('designer:export:bpmn')" @click="handleExportBpmn">导出 BPMN</el-button>
+                        <el-button v-if="hasButton('designer:export:bpmn-xml')" @click="handleExportBpmnXml">导出 BPMN.XML</el-button>
+                        <el-button v-if="hasButton('designer:export:png')" @click="handleExportPng">导出 PNG</el-button>
+                        <el-button v-if="hasButton('designer:canvas:center')" @click="handleCenterCanvas">居中显示</el-button>
+                        <el-button v-if="hasButton('designer:canvas:reset')" @click="handleResetCanvas">清空画布</el-button>
+                        <el-button v-if="hasButton('designer:canvas:refresh')" type="primary" @click="handleRefresh">刷新画布</el-button>
                     </div>
                 </div>
 
@@ -123,7 +123,7 @@ window.ProcessDesigner = {
                                 <button type="button" class="designer-tool-button designer-tool-button-wide" @click="handleFitCanvas">
                                     适应视图
                                 </button>
-                                <button type="button" class="designer-tool-button designer-tool-button-wide" @click="handleCenterCanvas">
+                                <button  type="button" class="designer-tool-button designer-tool-button-wide" @click="handleCenterCanvas">
                                     居中查看
                                 </button>
                             </div>
@@ -823,6 +823,12 @@ window.ProcessDesigner = {
         }
     },
     methods: {
+        hasButton: function (permissionCode) {
+            if (this.$root && typeof this.$root.hasButton === "function") {
+                return this.$root.hasButton(permissionCode);
+            }
+            return window.AppService.hasResource(permissionCode, "BUTTON");
+        },
         ensureStyle: function () {
             if (document.getElementById(processDesignerStyleId)) {
                 return;
