@@ -24,8 +24,8 @@ window.ModelCenter = {
                                         <el-input v-model.trim="form.modelName" placeholder="请输入模型名称"></el-input>
                                     </el-form-item>
                                     <div class="form-grid two-columns">
-                                        <el-form-item label="模型标识">
-                                            <el-input v-model.trim="form.modelKey" placeholder="例如：请假流程"></el-input>
+                                        <el-form-item label="流程定义ID">
+                                            <el-input v-model.trim="form.modelKey" placeholder="例如：leave-process"></el-input>
                                         </el-form-item>
                                         <el-form-item label="模型分类">
                                             <el-input v-model.trim="form.category" placeholder="请输入模型分类"></el-input>
@@ -344,10 +344,11 @@ window.ModelCenter = {
         },
         submitModel: async function () {
             if (!this.form.modelName || !this.form.modelKey || !this.form.bpmnXml) {
-                this.$root.showError("模型名称、模型标识和模型源码不能为空");
+                this.$root.showError("模型名称、流程定义ID和模型源码不能为空");
                 return;
             }
             try {
+                this.validateModelProcessDefinitionId(this.form.modelKey, this.form.bpmnXml);
                 var payload = {
                     modelName: this.form.modelName,
                     modelKey: this.form.modelKey,
@@ -390,6 +391,9 @@ window.ModelCenter = {
                 return;
             }
             try {
+                if (this.form.modelKey) {
+                    this.validateModelProcessDefinitionId(this.form.modelKey, this.form.bpmnXml);
+                }
                 this.previewDetail = this.buildPreviewDetailFromXml({
                     modelName: this.form.modelName,
                     modelKey: this.form.modelKey,
@@ -640,6 +644,25 @@ window.ModelCenter = {
                 nodes: nodes,
                 sequenceFlows: sequenceFlows
             };
+        },
+        validateModelProcessDefinitionId: function (modelKey, xmlText) {
+            var parser = new DOMParser();
+            var documentNode = parser.parseFromString(xmlText || "", "text/xml");
+            var parseError = documentNode.getElementsByTagName("parsererror");
+            if (parseError && parseError.length) {
+                throw new Error("模型源码格式不正确");
+            }
+            var processElement = this.findFirstElementByLocalName(documentNode, "process");
+            if (!processElement) {
+                throw new Error("模型源码中未找到流程定义");
+            }
+            var processDefinitionId = (processElement.getAttribute("id") || "").trim();
+            if (!processDefinitionId) {
+                throw new Error("模型源码缺少流程定义ID，请检查 BPMN 中的 process id");
+            }
+            if (processDefinitionId !== (modelKey || "").trim()) {
+                throw new Error("流程定义ID必须与模型标识一致，当前流程定义ID：" + processDefinitionId);
+            }
         },
         buildShapeMap: function (documentNode) {
             var result = {};

@@ -10,6 +10,9 @@ import com.wcdk.process.service.FlowableModelService;
 import com.wcdk.process.service.WcdkProcessClientRegistryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.flowable.bpmn.converter.BpmnXMLConverter;
+import org.flowable.bpmn.model.BpmnModel;
+import org.flowable.bpmn.model.Process;
 import org.flowable.engine.RepositoryService;
 import org.flowable.engine.repository.Deployment;
 import org.flowable.engine.repository.Model;
@@ -17,6 +20,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamReader;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
@@ -42,6 +50,7 @@ public class FlowableModelServiceImpl implements FlowableModelService {
     @Transactional(rollbackFor = Exception.class)
     public ModelResponse createModel(ModelCreateRequest request) {
         validateModelRequest(request.getModelName(), request.getModelKey(), request.getBpmnXml());
+        validateProcessDefinitionId(request.getModelKey(), request.getBpmnXml());
         Model model = repositoryService.newModel();
         model.setName(request.getModelName());
         model.setKey(request.getModelKey());
@@ -155,6 +164,30 @@ public class FlowableModelServiceImpl implements FlowableModelService {
         }
         if (!StringUtils.hasText(bpmnXml)) {
             throw new IllegalArgumentException("BPMN XML 内容不能为空");
+        }
+    }
+
+    private void validateProcessDefinitionId(String modelKey, String bpmnXml) {
+        BpmnModel bpmnModel = parseBpmnModel(bpmnXml);
+        Process mainProcess = bpmnModel == null ? null : bpmnModel.getMainProcess();
+        if (mainProcess == null || !StringUtils.hasText(mainProcess.getId())) {
+            throw new IllegalArgumentException("模型源码缺少流程定义ID，请检查 BPMN 中的 process id");
+        }
+        String processDefinitionId = mainProcess.getId().trim();
+        if (!processDefinitionId.equals(modelKey.trim())) {
+            throw new IllegalArgumentException("流程定义ID必须与模型标识一致，当前流程定义ID：" + processDefinitionId);
+        }
+    }
+
+    private BpmnModel parseBpmnModel(String bpmnXml) {
+        XMLInputFactory inputFactory = XMLInputFactory.newFactory();
+        try (ByteArrayInputStream inputStream = new ByteArrayInputStream(bpmnXml.getBytes(StandardCharsets.UTF_8))) {
+            XMLStreamReader streamReader = inputFactory.createXMLStreamReader(inputStream, StandardCharsets.UTF_8.name());
+            return new BpmnXMLConverter().convertToBpmnModel(streamReader);
+        } catch (XMLStreamException exception) {
+            throw new IllegalArgumentException("模型源码格式不正确，请检查 BPMN XML 内容", exception);
+        } catch (IOException exception) {
+            throw new IllegalArgumentException("读取 BPMN XML 内容失败", exception);
         }
     }
 
