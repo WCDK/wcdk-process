@@ -5,9 +5,9 @@ spring:
     name: wcdk-process
   datasource:
     type: com.alibaba.druid.pool.DruidDataSource
-    url: jdbc:dm://localhost:25236/QXTD-PROCESS
-    username: QXTD-PROCESS
-    password: Qxtd@2026
+    url: jdbc:dm://localhost:25236/WCDK-PROCESS
+    username: WCDK-PROCESS
+    password: WCDK@2026
     driver-class-name: dm.jdbc.driver.DmDriver
     druid:
       initial-size: 5

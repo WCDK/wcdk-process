@@ -49,8 +49,6 @@
         ],
         defaultOptions: function () {
             return [
-                { label: "选项一", value: "选项一" },
-                { label: "选项二", value: "选项二" }
             ];
         },
         drawControlPreview: function (designer, context, field, actualX, actualY) {

@@ -3,102 +3,102 @@
  * @date 2026/7/15
  * @version 1.0
  **/
-if (!window.__wcdkF12Blocked) {
-    window.__wcdkF12Blocked = true;
-    var devtoolsOverlay = document.createElement("div");
-    var devtoolsStyle = document.createElement("style");
-    var devtoolsLocked = false;
-    var devtoolsDestroyed = false;
-    devtoolsOverlay.id = "wcdk-devtools-overlay";
-    devtoolsOverlay.innerHTML = "<div class=\"wcdk-devtools-overlay__content\">检测到开发者工具已打开，当前页面已禁止操作</div>";
-    devtoolsStyle.textContent = ""
-        + "#wcdk-devtools-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(120,120,120,0.45);backdrop-filter:grayscale(1);z-index:999999;pointer-events:auto;}"
-        + "#wcdk-devtools-overlay .wcdk-devtools-overlay__content{padding:20px 28px;border-radius:12px;background:rgba(255,255,255,0.96);color:#303133;font-size:16px;font-weight:600;box-shadow:0 12px 32px rgba(0,0,0,0.16);}"
-        + "html.wcdk-devtools-locked body>*:not(#wcdk-devtools-overlay){filter:grayscale(1);}"
-        + "html.wcdk-devtools-locked{overflow:hidden;}";
-    document.head.appendChild(devtoolsStyle);
-    document.addEventListener("DOMContentLoaded", function () {
-        if (!document.getElementById("wcdk-devtools-overlay")) {
-            document.body.appendChild(devtoolsOverlay);
-        }
-    });
-
-    function setDevtoolsLocked(locked) {
-        if (devtoolsLocked === locked) {
-            return;
-        }
-        devtoolsLocked = locked;
-        if (!document.getElementById("wcdk-devtools-overlay") && document.body) {
-            document.body.appendChild(devtoolsOverlay);
-        }
-        document.documentElement.classList.toggle("wcdk-devtools-locked", locked);
-        devtoolsOverlay.style.display = locked ? "flex" : "none";
-        if (locked) {
-            destroyFrontendResources();
-            console.log("请访问以下地址获取源码：");
-            console.log("https://github.com/WCDK/wcdk-process");
-        }
-    }
-
-    function detectDevtoolsOpened() {
-        var widthGap = window.outerWidth - window.innerWidth;
-        var heightGap = window.outerHeight - window.innerHeight;
-        return widthGap > 160 || heightGap > 160;
-    }
-
-    function destroyFrontendResources() {
-        if (devtoolsDestroyed) {
-            return;
-        }
-        devtoolsDestroyed = true;
-        Array.prototype.slice.call(document.querySelectorAll("link[rel='stylesheet'], style")).forEach(function (node) {
-            if (node !== devtoolsStyle && node.parentNode) {
-                node.parentNode.removeChild(node);
-            }
-        });
-        Array.prototype.slice.call(document.querySelectorAll("script")).forEach(function (node) {
-            if (node.parentNode) {
-                node.parentNode.removeChild(node);
-            }
-        });
-        if (document.body) {
-            Array.prototype.slice.call(document.body.children).forEach(function (node) {
-                if (node !== devtoolsOverlay) {
-                    node.remove();
-                }
-            });
-            if (!document.getElementById("wcdk-devtools-overlay")) {
-                document.body.appendChild(devtoolsOverlay);
-            }
-        }
-    }
-
-    document.addEventListener("keydown", function (event) {
-        var key = (event.key || "").toUpperCase();
-        var blockedByFunctionKey = key === "F12" || event.keyCode === 123;
-        var blockedByShortcut = event.ctrlKey && ((event.shiftKey && (key === "I" || key === "J" || key === "C")) || key === "U");
-        if (devtoolsLocked || blockedByFunctionKey || blockedByShortcut) {
-            event.preventDefault();
-            event.stopPropagation();
-        }
-    }, true);
-    document.addEventListener("click", function (event) {
-        if (devtoolsLocked) {
-            event.preventDefault();
-            event.stopPropagation();
-        }
-    }, true);
-    document.addEventListener("contextmenu", function (event) {
-        event.preventDefault();
-    });
-    window.addEventListener("resize", function () {
-        setDevtoolsLocked(detectDevtoolsOpened());
-    });
-    setDevtoolsLocked(detectDevtoolsOpened());
-    window.setInterval(function () {
-        setDevtoolsLocked(detectDevtoolsOpened());
-    }, 1000);
-}
+// if (!window.__wcdkF12Blocked) {
+//     window.__wcdkF12Blocked = true;
+//     var devtoolsOverlay = document.createElement("div");
+//     var devtoolsStyle = document.createElement("style");
+//     var devtoolsLocked = false;
+//     var devtoolsDestroyed = false;
+//     devtoolsOverlay.id = "wcdk-devtools-overlay";
+//     devtoolsOverlay.innerHTML = "<div class=\"wcdk-devtools-overlay__content\">检测到开发者工具已打开，当前页面已禁止操作</div>";
+//     devtoolsStyle.textContent = ""
+//         + "#wcdk-devtools-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(120,120,120,0.45);backdrop-filter:grayscale(1);z-index:999999;pointer-events:auto;}"
+//         + "#wcdk-devtools-overlay .wcdk-devtools-overlay__content{padding:20px 28px;border-radius:12px;background:rgba(255,255,255,0.96);color:#303133;font-size:16px;font-weight:600;box-shadow:0 12px 32px rgba(0,0,0,0.16);}"
+//         + "html.wcdk-devtools-locked body>*:not(#wcdk-devtools-overlay){filter:grayscale(1);}"
+//         + "html.wcdk-devtools-locked{overflow:hidden;}";
+//     document.head.appendChild(devtoolsStyle);
+//     document.addEventListener("DOMContentLoaded", function () {
+//         if (!document.getElementById("wcdk-devtools-overlay")) {
+//             document.body.appendChild(devtoolsOverlay);
+//         }
+//     });
+//
+//     function setDevtoolsLocked(locked) {
+//         if (devtoolsLocked === locked) {
+//             return;
+//         }
+//         devtoolsLocked = locked;
+//         if (!document.getElementById("wcdk-devtools-overlay") && document.body) {
+//             document.body.appendChild(devtoolsOverlay);
+//         }
+//         document.documentElement.classList.toggle("wcdk-devtools-locked", locked);
+//         devtoolsOverlay.style.display = locked ? "flex" : "none";
+//         if (locked) {
+//             destroyFrontendResources();
+//             console.log("请访问以下地址获取源码：");
+//             console.log("https://github.com/WCDK/wcdk-process");
+//         }
+//     }
+//
+//     function detectDevtoolsOpened() {
+//         var widthGap = window.outerWidth - window.innerWidth;
+//         var heightGap = window.outerHeight - window.innerHeight;
+//         return widthGap > 160 || heightGap > 160;
+//     }
+//
+//     function destroyFrontendResources() {
+//         if (devtoolsDestroyed) {
+//             return;
+//         }
+//         devtoolsDestroyed = true;
+//         Array.prototype.slice.call(document.querySelectorAll("link[rel='stylesheet'], style")).forEach(function (node) {
+//             if (node !== devtoolsStyle && node.parentNode) {
+//                 node.parentNode.removeChild(node);
+//             }
+//         });
+//         Array.prototype.slice.call(document.querySelectorAll("script")).forEach(function (node) {
+//             if (node.parentNode) {
+//                 node.parentNode.removeChild(node);
+//             }
+//         });
+//         if (document.body) {
+//             Array.prototype.slice.call(document.body.children).forEach(function (node) {
+//                 if (node !== devtoolsOverlay) {
+//                     node.remove();
+//                 }
+//             });
+//             if (!document.getElementById("wcdk-devtools-overlay")) {
+//                 document.body.appendChild(devtoolsOverlay);
+//             }
+//         }
+//     }
+//
+//     document.addEventListener("keydown", function (event) {
+//         var key = (event.key || "").toUpperCase();
+//         var blockedByFunctionKey = key === "F12" || event.keyCode === 123;
+//         var blockedByShortcut = event.ctrlKey && ((event.shiftKey && (key === "I" || key === "J" || key === "C")) || key === "U");
+//         if (devtoolsLocked || blockedByFunctionKey || blockedByShortcut) {
+//             event.preventDefault();
+//             event.stopPropagation();
+//         }
+//     }, true);
+//     document.addEventListener("click", function (event) {
+//         if (devtoolsLocked) {
+//             event.preventDefault();
+//             event.stopPropagation();
+//         }
+//     }, true);
+//     document.addEventListener("contextmenu", function (event) {
+//         event.preventDefault();
+//     });
+//     window.addEventListener("resize", function () {
+//         setDevtoolsLocked(detectDevtoolsOpened());
+//     });
+//     setDevtoolsLocked(detectDevtoolsOpened());
+//     window.setInterval(function () {
+//         setDevtoolsLocked(detectDevtoolsOpened());
+//     }, 1000);
+// }
 
 Vue.use(ELEMENT);
 Vue.use(VueRouter);

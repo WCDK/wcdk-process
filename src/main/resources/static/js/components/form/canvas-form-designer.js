@@ -894,6 +894,9 @@
                 this.handlePreviewTrigger(event, "click");
             },
             handlePreviewChange: function (event) {
+                if (event.target && event.target.classList && event.target.classList.contains("canvas-form-preview-select-input")) {
+                    this.syncPreviewDatalistValue(event.target);
+                }
                 this.handlePreviewTrigger(event, "onchange");
             },
             handlePreviewTrigger: function (event, triggerMode) {
@@ -983,7 +986,7 @@
                     return;
                 }
                 var self = this;
-                var controls = container.querySelectorAll("select[data-source-url],.canvas-form-preview-options[data-source-url]");
+                var controls = container.querySelectorAll("select[data-source-url],input[list][data-source-url],.canvas-form-preview-options[data-source-url]");
                 Array.prototype.forEach.call(controls, function (control) {
                     self.loadPreviewRemoteOptions(control);
                 });
@@ -1012,7 +1015,7 @@
                 var parsed = data;
                 if (script) {
                     var field = {
-                        fieldKey: control.getAttribute("name") || control.getAttribute("data-option-name") || "",
+                        fieldKey: control.getAttribute("name") || control.getAttribute("data-field-key") || control.getAttribute("data-option-name") || "",
                         sourceUrl: control.getAttribute("data-source-url") || "",
                         method: control.getAttribute("data-source-method") || "GET"
                     };
@@ -1027,6 +1030,10 @@
             renderPreviewRemoteOptions: function (control, options) {
                 if (control.tagName && control.tagName.toLowerCase() === "select") {
                     this.renderPreviewSelectOptions(control, options);
+                    return;
+                }
+                if (control.tagName && control.tagName.toLowerCase() === "input" && control.getAttribute("list")) {
+                    this.renderPreviewDatalistOptions(control, options);
                     return;
                 }
                 this.renderPreviewChoiceOptions(control, options);
@@ -1074,6 +1081,55 @@
                 });
                 select.value = currentValue;
             },
+            renderPreviewDatalistOptions: function (input, options) {
+                var listId = input.getAttribute("list") || "";
+                var datalist = listId ? document.getElementById(listId) : null;
+                var targetId = input.getAttribute("data-value-target") || "";
+                var hidden = targetId ? document.getElementById(targetId) : null;
+                var currentSubmitValue = hidden ? hidden.value : (input.getAttribute("data-default-value") || "");
+                var currentDisplayValue = input.value || "";
+                var matchedDisplayValue = "";
+                if (!datalist) {
+                    datalist = document.createElement("datalist");
+                    datalist.id = listId || ((input.getAttribute("data-field-key") || "select") + "_list");
+                    input.setAttribute("list", datalist.id);
+                    input.parentNode.insertBefore(datalist, input.nextSibling);
+                }
+                datalist.innerHTML = "";
+                (options || []).forEach(function (item) {
+                    var value = item.value || item.label || "";
+                    var label = item.label || value;
+                    var option = document.createElement("option");
+                    option.value = label;
+                    option.setAttribute("data-value", value);
+                    if (String(value) === String(currentSubmitValue)) {
+                        matchedDisplayValue = label;
+                    }
+                    datalist.appendChild(option);
+                });
+                input.value = matchedDisplayValue || currentDisplayValue;
+                this.syncPreviewDatalistValue(input);
+            },
+            syncPreviewDatalistValue: function (input) {
+                if (!input || !input.getAttribute("data-value-target")) {
+                    return;
+                }
+                var hidden = document.getElementById(input.getAttribute("data-value-target"));
+                if (!hidden) {
+                    return;
+                }
+                var datalist = document.getElementById(input.getAttribute("list") || "");
+                var options = datalist ? datalist.querySelectorAll("option") : [];
+                var submitValue = input.value;
+                Array.prototype.some.call(options, function (option) {
+                    if (option.value === input.value) {
+                        submitValue = option.getAttribute("data-value") || option.value;
+                        return true;
+                    }
+                    return false;
+                });
+                hidden.value = submitValue;
+            },
             renderPreviewChoiceOptions: function (container, options) {
                 var type = container.getAttribute("data-option-type") || "radio";
                 var name = container.getAttribute("data-option-name") || "";
@@ -1097,8 +1153,23 @@
                 }
                 container.innerHTML = html.join("");
             },
+            parsePreviewFormControlValue: function (control) {
+                var valueType = control.getAttribute("data-value-type") || "";
+                var value = control.value;
+                if (valueType === "boolean") {
+                    return String(value) === String(control.getAttribute("data-active-value"));
+                }
+                if (valueType === "number") {
+                    return value === "" ? null : Number(value);
+                }
+                return value;
+            },
             collectPreviewFormData: function (container) {
                 var data = {};
+                var datalistInputs = container.querySelectorAll(".canvas-form-preview-select-input[data-value-target]");
+                Array.prototype.forEach.call(datalistInputs, function (input) {
+                    this.syncPreviewDatalistValue(input);
+                }, this);
                 var controls = container.querySelectorAll("input[name],textarea[name],select[name]");
                 Array.prototype.forEach.call(controls, function (control) {
                     var name = control.getAttribute("name");
@@ -1112,11 +1183,11 @@
                         if (!Array.isArray(data[name])) {
                             data[name] = [data[name]];
                         }
-                        data[name].push(control.value);
+                        data[name].push(this.parsePreviewFormControlValue(control));
                         return;
                     }
-                    data[name] = control.value;
-                });
+                    data[name] = this.parsePreviewFormControlValue(control);
+                }, this);
                 return data;
             },
             submitPreviewGroup: function (groupElement) {
@@ -1146,14 +1217,17 @@
                     "function parseActionParam(text){if(!text){return null;}try{return JSON.parse(text);}catch(error){return text;}}",
                     "function appendGetParam(url,param){if(!param){return url;}var query=typeof param==='string'?param:new URLSearchParams(param).toString();if(!query){return url;}return url+(url.indexOf('?')>=0?'&':'?')+query;}",
                     "function normalizePreviewSelectOptions(value){if(value&&Array.isArray(value.data)){value=value.data;}else if(value&&Array.isArray(value.records)){value=value.records;}else if(value&&Array.isArray(value.list)){value=value.list;}else if(value&&value.data&&Array.isArray(value.data.records)){value=value.data.records;}if(Array.isArray(value)){return value.map(function(item){if(item&&typeof item==='object'){var keys=Object.keys(item);if(!item.label&&!item.value&&keys.length===1){return{label:keys[0],value:item[keys[0]]};}var label=item.label||item.name||item.text||item.title||item.key||item.value||'';var optionValue=item.value||item.id||item.code||item.key||label;return{label:label,value:optionValue};}return{label:item,value:item};}).filter(function(item){return item.label!==''||item.value!=='';});}if(value&&typeof value==='object'){return Object.keys(value).map(function(key){return{label:key,value:value[key]};});}return value?[{label:value,value:value}]:[];}",
-                    "function resolvePreviewSelectOptions(data,script,control){var parsed=data;if(script){var field={fieldKey:control.getAttribute('name')||control.getAttribute('data-option-name')||'',sourceUrl:control.getAttribute('data-source-url')||'',method:control.getAttribute('data-source-method')||'GET'};try{parsed=(new Function('data','field','return ('+script+')(data, field);'))(data,field);}catch(expressionError){parsed=(new Function('data','field',script))(data,field);}}return normalizePreviewSelectOptions(parsed);}",
+                    "function resolvePreviewSelectOptions(data,script,control){var parsed=data;if(script){var field={fieldKey:control.getAttribute('name')||control.getAttribute('data-field-key')||control.getAttribute('data-option-name')||'',sourceUrl:control.getAttribute('data-source-url')||'',method:control.getAttribute('data-source-method')||'GET'};try{parsed=(new Function('data','field','return ('+script+')(data, field);'))(data,field);}catch(expressionError){parsed=(new Function('data','field',script))(data,field);}}return normalizePreviewSelectOptions(parsed);}",
                     "function renderPreviewSelectOptions(select,options){var placeholder=select.options.length?select.options[0].text:'请选择';var currentValue=select.value||select.getAttribute('data-default-value')||'';select.innerHTML='';select.appendChild(new Option(placeholder,''));(options||[]).forEach(function(item){select.appendChild(new Option(item.label,item.value));});select.value=currentValue;}",
+                    "function renderPreviewDatalistOptions(input,options){var listId=input.getAttribute('list')||'';var datalist=listId?document.getElementById(listId):null;var targetId=input.getAttribute('data-value-target')||'';var hidden=targetId?document.getElementById(targetId):null;var currentSubmitValue=hidden?hidden.value:(input.getAttribute('data-default-value')||'');var currentDisplayValue=input.value||'';var matchedDisplayValue='';if(!datalist){datalist=document.createElement('datalist');datalist.id=listId||((input.getAttribute('data-field-key')||'select')+'_list');input.setAttribute('list',datalist.id);input.parentNode.insertBefore(datalist,input.nextSibling);}datalist.innerHTML='';(options||[]).forEach(function(item){var value=item.value||item.label||'';var label=item.label||value;var option=document.createElement('option');option.value=label;option.setAttribute('data-value',value);if(String(value)===String(currentSubmitValue)){matchedDisplayValue=label;}datalist.appendChild(option);});input.value=matchedDisplayValue||currentDisplayValue;syncPreviewDatalistValue(input);}",
+                    "function syncPreviewDatalistValue(input){if(!input||!input.getAttribute('data-value-target')){return;}var hidden=document.getElementById(input.getAttribute('data-value-target'));if(!hidden){return;}var datalist=document.getElementById(input.getAttribute('list')||'');var options=datalist?datalist.querySelectorAll('option'):[];var submitValue=input.value;Array.prototype.some.call(options,function(option){if(option.value===input.value){submitValue=option.getAttribute('data-value')||option.value;return true;}return false;});hidden.value=submitValue;}",
                     "function renderPreviewChoiceOptions(container,options){var type=container.getAttribute('data-option-type')||'radio';var name=container.getAttribute('data-option-name')||'';var defaults=String(container.getAttribute('data-default-value')||'').split(',').map(function(item){return item.trim();});var className=type==='checkbox'?'el-checkbox':'el-radio';var inputClassName=type==='checkbox'?'el-checkbox__input':'el-radio__input';var html=[];(options||[]).forEach(function(item){var value=item.value||item.label||'';var checked=defaults.indexOf(String(value))>=0?' checked':'';html.push('<label class=\"'+className+'\"><input class=\"'+inputClassName+'\" type=\"'+type+'\" name=\"'+escapeHtml(name)+'\" value=\"'+escapeHtml(value)+'\"'+checked+'><span>'+escapeHtml(item.label||value||'-')+'</span></label>');});if(!html.length){html.push('<span>暂无选项</span>');}container.innerHTML=html.join('');}",
-                    "function renderPreviewRemoteOptions(control,options){if(control.tagName&&control.tagName.toLowerCase()==='select'){renderPreviewSelectOptions(control,options);return;}renderPreviewChoiceOptions(control,options);}",
+                    "function renderPreviewRemoteOptions(control,options){if(control.tagName&&control.tagName.toLowerCase()==='select'){renderPreviewSelectOptions(control,options);return;}if(control.tagName&&control.tagName.toLowerCase()==='input'&&control.getAttribute('list')){renderPreviewDatalistOptions(control,options);return;}renderPreviewChoiceOptions(control,options);}",
                     "function loadPreviewRemoteOptions(control){var url=control.getAttribute('data-source-url')||'';if(!url){return;}var method=(control.getAttribute('data-source-method')||'GET').toUpperCase();fetch(url,{method:method,headers:{'Content-Type':'application/json'}}).then(function(response){return response.text();}).then(function(text){var data=text;try{data=JSON.parse(text);}catch(error){}var options=resolvePreviewSelectOptions(data,control.getAttribute('data-source-script')||'',control);renderPreviewRemoteOptions(control,options);}).catch(function(error){control.setAttribute('data-source-error',error.message);});}",
-                    "function loadPreviewOptionData(container){var controls=(container||document).querySelectorAll('select[data-source-url],.canvas-form-preview-options[data-source-url]');Array.prototype.forEach.call(controls,function(control){loadPreviewRemoteOptions(control);});}",
+                    "function loadPreviewOptionData(container){var controls=(container||document).querySelectorAll('select[data-source-url],input[list][data-source-url],.canvas-form-preview-options[data-source-url]');Array.prototype.forEach.call(controls,function(control){loadPreviewRemoteOptions(control);});}",
                     "function escapeHtml(value){return String(value||'').replace(/[&<>\"']/g,function(item){return{'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[item];});}",
-                    "function collectPreviewFormData(container){var data={};var controls=container.querySelectorAll('input[name],textarea[name],select[name]');Array.prototype.forEach.call(controls,function(control){var name=control.getAttribute('name');if(!name||control.disabled){return;}if((control.type==='checkbox'||control.type==='radio')&&!control.checked){return;}if(Object.prototype.hasOwnProperty.call(data,name)){if(!Array.isArray(data[name])){data[name]=[data[name]];}data[name].push(control.value);return;}data[name]=control.value;});return data;}",
+                    "function parsePreviewFormControlValue(control){var valueType=control.getAttribute('data-value-type')||'';var value=control.value;if(valueType==='boolean'){return String(value)===String(control.getAttribute('data-active-value'));}if(valueType==='number'){return value===''?null:Number(value);}return value;}",
+                    "function collectPreviewFormData(container){var data={};var datalistInputs=container.querySelectorAll('.canvas-form-preview-select-input[data-value-target]');Array.prototype.forEach.call(datalistInputs,function(input){syncPreviewDatalistValue(input);});var controls=container.querySelectorAll('input[name],textarea[name],select[name]');Array.prototype.forEach.call(controls,function(control){var name=control.getAttribute('name');if(!name||control.disabled){return;}if((control.type==='checkbox'||control.type==='radio')&&!control.checked){return;}var value=parsePreviewFormControlValue(control);if(Object.prototype.hasOwnProperty.call(data,name)){if(!Array.isArray(data[name])){data[name]=[data[name]];}data[name].push(value);return;}data[name]=value;});return data;}",
                     "function submitPreviewGroup(groupElement){var submitUrl=groupElement.getAttribute('data-submit-url')||'';if(!submitUrl){return;}var submitMethod=(groupElement.getAttribute('data-submit-method')||'POST').toUpperCase();var submitParamMode=groupElement.getAttribute('data-submit-param-mode')||'body';var data=collectPreviewFormData(groupElement);var requestUrl=(submitMethod==='GET'||submitParamMode==='requestParam')?appendGetParam(submitUrl,data):submitUrl;var requestOptions={method:submitMethod,headers:{'Content-Type':'application/json'}};if(submitMethod!=='GET'&&submitParamMode==='body'){requestOptions.body=JSON.stringify(data);}fetch(requestUrl,requestOptions).then(function(response){alert('表单已提交：'+response.status);}).catch(function(error){alert('表单提交失败：'+error.message);});}",
                     "function handlePreviewTrigger(event,triggerMode){",
                     "var target=event.target.closest&&event.target.closest('.canvas-form-preview-action');",
@@ -1183,7 +1257,7 @@
                     "invokeAction();",
                     "}",
                     "document.addEventListener('click',function(event){handlePreviewTrigger(event,'click');});",
-                    "document.addEventListener('change',function(event){handlePreviewTrigger(event,'onchange');});",
+                    "document.addEventListener('change',function(event){if(event.target&&event.target.classList&&event.target.classList.contains('canvas-form-preview-select-input')){syncPreviewDatalistValue(event.target);}handlePreviewTrigger(event,'onchange');});",
                     "if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',function(){loadPreviewOptionData(document);});}else{loadPreviewOptionData(document);}",
                     "})();"
                 ].join("");
