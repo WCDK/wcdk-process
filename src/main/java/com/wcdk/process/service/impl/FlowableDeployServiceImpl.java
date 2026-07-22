@@ -12,6 +12,7 @@ import com.wcdk.process.dto.ProcessDiagramNodeResponse;
 import com.wcdk.process.dto.ProcessDiagramWaypointResponse;
 import com.wcdk.process.dto.ProcessFormFieldResponse;
 import com.wcdk.process.dto.ProcessFormOptionResponse;
+import com.wcdk.process.dto.ProcessFormTableCellResponse;
 import com.wcdk.process.dto.ProcessDefinitionResponse;
 import com.wcdk.process.entity.WcdkProcessClient;
 import com.wcdk.process.entity.WcdkProcessClientProcess;
@@ -783,11 +784,86 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
             if (field == null) {
                 continue;
             }
-            String fieldKey = firstNonBlank(field.getString("fieldKey"), field.getString("prop"), field.getString("id"));
+            String componentType = normalizeComponentType(firstNonBlank(field.getString("componentType"), field.getString("type")), field.containsKey("options"));
+            if ("group".equals(componentType)) {
+                results.addAll(parseFormFields(field.getJSONArray("children"), ownerElement, nodes));
+                continue;
+            }
+            if ("button".equals(componentType)) {
+                continue;
+            }
+            String fieldKey = firstNonBlank(field.getString("fieldKey"), field.getString("bindField"), field.getString("prop"), field.getString("id"));
             if (!StringUtils.hasText(fieldKey)) {
                 continue;
             }
-            String componentType = normalizeComponentType(field.getString("componentType"), field.containsKey("options"));
+            String label = firstNonBlank(field.getString("label"), fieldKey);
+            results.add(ProcessFormFieldResponse.builder()
+                    .fieldKey(fieldKey)
+                    .label(label)
+                    .componentType(componentType)
+                    .dataType(normalizeDataType(field.getString("dataType")))
+                    .placeholder(firstNonBlank(field.getString("placeholder"), buildDefaultPlaceholder(label, componentType)))
+                    .required(!Boolean.FALSE.equals(field.getBoolean("required")))
+                    .readOnly(Boolean.TRUE.equals(field.getBoolean("readOnly")))
+                    .defaultValue(field.getString("defaultValue"))
+                    .rows(field.getIntValue("rows") > 0 ? field.getIntValue("rows") : ("textarea".equals(componentType) ? 4 : null))
+                    .tableRows(field.getIntValue("tableRows") > 0 ? field.getIntValue("tableRows") : null)
+                    .tableColumns(field.getIntValue("tableColumns") > 0 ? field.getIntValue("tableColumns") : null)
+                    .sortOrder(field.getIntValue("sortOrder") > 0 ? field.getIntValue("sortOrder") : index)
+                    .sourceNodeId(ownerNodeId)
+                    .sourceNodeName(sourceNode == null ? null : sourceNode.getElementName())
+                    .options(parseFieldOptions(field.getJSONArray("options")))
+                    .children(parseTableChildren(field.getJSONArray("children"), ownerNodeId, sourceNode))
+                    .build());
+        }
+        return results;
+    }
+
+    private List<ProcessFormTableCellResponse> parseTableChildren(JSONArray children,
+                                                                  String ownerNodeId,
+                                                                  ProcessDiagramNodeResponse sourceNode) {
+        if (children == null || children.isEmpty()) {
+            return List.of();
+        }
+        List<ProcessFormTableCellResponse> results = new ArrayList<>();
+        for (int index = 0; index < children.size(); index += 1) {
+            JSONObject cell = children.getJSONObject(index);
+            if (cell == null) {
+                continue;
+            }
+            results.add(ProcessFormTableCellResponse.builder()
+                    .row(cell.getIntValue("row"))
+                    .column(cell.getIntValue("column"))
+                    .fields(parseTableCellFields(cell.getJSONArray("fields"), ownerNodeId, sourceNode))
+                    .build());
+        }
+        return results;
+    }
+
+    private List<ProcessFormFieldResponse> parseTableCellFields(JSONArray fields,
+                                                                String ownerNodeId,
+                                                                ProcessDiagramNodeResponse sourceNode) {
+        if (fields == null || fields.isEmpty()) {
+            return List.of();
+        }
+        List<ProcessFormFieldResponse> results = new ArrayList<>();
+        for (int index = 0; index < fields.size(); index += 1) {
+            JSONObject field = fields.getJSONObject(index);
+            if (field == null) {
+                continue;
+            }
+            String componentType = normalizeComponentType(firstNonBlank(field.getString("componentType"), field.getString("type")), field.containsKey("options"));
+            if ("group".equals(componentType)) {
+                results.addAll(parseTableCellFields(field.getJSONArray("children"), ownerNodeId, sourceNode));
+                continue;
+            }
+            if ("button".equals(componentType) || "table".equals(componentType)) {
+                continue;
+            }
+            String fieldKey = firstNonBlank(field.getString("fieldKey"), field.getString("bindField"), field.getString("prop"), field.getString("id"));
+            if (!StringUtils.hasText(fieldKey)) {
+                continue;
+            }
             String label = firstNonBlank(field.getString("label"), fieldKey);
             results.add(ProcessFormFieldResponse.builder()
                     .fieldKey(fieldKey)
@@ -919,8 +995,20 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
         if (normalized.contains("textarea")) {
             return "textarea";
         }
+        if (normalized.contains("table")) {
+            return "table";
+        }
+        if (normalized.contains("group")) {
+            return "group";
+        }
+        if (normalized.contains("button")) {
+            return "button";
+        }
         if (normalized.contains("radio")) {
             return "radio";
+        }
+        if (normalized.contains("switch")) {
+            return "switch";
         }
         if (normalized.contains("checkbox") || "boolean".equals(normalized)) {
             return "checkbox";

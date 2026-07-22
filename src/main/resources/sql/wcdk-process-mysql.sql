@@ -133,6 +133,7 @@ INSERT INTO `SYS_PERMISSION` (`ID`, `PARENT_ID`, `PERMISSION_CODE`, `PERMISSION_
 (1102, NULL, 'menu:deploy', '部署中心', 'MENU', '/deploy', 2, 1, '部署中心权限', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
 (1103, NULL, 'menu:model', '模型中心', 'MENU', '/model', 3, 1, '模型中心权限', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
 (1104, NULL, 'menu:designer', '流程设计', 'MENU', '/designer', 4, 1, '流程设计权限', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(1170, NULL, 'menu:form', '表单设计', 'MENU', '/form-designer', 5, 1, '表单设计权限', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
 (1105, NULL, 'menu:process', '流程中心', 'MENU', '/process', 5, 1, '流程中心权限', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
 (1106, NULL, 'menu:task', '任务中心', 'MENU', '/task', 6, 1, '任务中心权限', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
 (1107, NULL, 'menu:sys:user', '用户管理', 'MENU', '/system/user', 7, 1, '用户管理权限', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
@@ -166,6 +167,7 @@ UPDATE `SYS_PERMISSION` SET `ICON` = 'el-icon-house' WHERE `PERMISSION_CODE` = '
 UPDATE `SYS_PERMISSION` SET `ICON` = 'el-icon-upload2' WHERE `PERMISSION_CODE` = 'menu:deploy';
 UPDATE `SYS_PERMISSION` SET `ICON` = 'el-icon-collection' WHERE `PERMISSION_CODE` = 'menu:model';
 UPDATE `SYS_PERMISSION` SET `ICON` = 'el-icon-edit-outline' WHERE `PERMISSION_CODE` = 'menu:designer';
+UPDATE `SYS_PERMISSION` SET `ICON` = 'el-icon-tickets' WHERE `PERMISSION_CODE` = 'menu:form';
 UPDATE `SYS_PERMISSION` SET `ICON` = 'el-icon-s-operation' WHERE `PERMISSION_CODE` = 'menu:process';
 UPDATE `SYS_PERMISSION` SET `ICON` = 'el-icon-s-check' WHERE `PERMISSION_CODE` = 'menu:task';
 UPDATE `SYS_PERMISSION` SET `ICON` = 'el-icon-connection' WHERE `PERMISSION_CODE` = 'client:view';
@@ -214,9 +216,15 @@ INSERT INTO `SYS_PERMISSION` (`ID`, `PARENT_ID`, `PERMISSION_CODE`, `PERMISSION_
 (1166, 1104, 'designer:export:png', '导出 PNG', 'BUTTON', NULL, 12, 1, '导出 PNG 图片', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
 (1167, 1104, 'designer:canvas:center', '居中显示', 'BUTTON', NULL, 13, 1, '将画布内容居中显示', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
 (1168, 1104, 'designer:canvas:reset', '清空画布', 'BUTTON', NULL, 14, 1, '清空画布内容', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-(1169, 1104, 'designer:canvas:refresh', '刷新画布', 'BUTTON', NULL, 15, 1, '刷新画布内容', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+(1169, 1104, 'designer:canvas:refresh', '刷新画布', 'BUTTON', NULL, 15, 1, '刷新画布内容', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(1171, 1170, 'form:save', '保存表单方案', 'BUTTON', NULL, 10, 1, '保存表单设计方案', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(1172, 1170, 'form:load', '载入表单方案', 'BUTTON', NULL, 11, 1, '载入表单设计方案', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(1173, 1170, 'form:export', '导出表单JSON', 'BUTTON', NULL, 12, 1, '导出表单设计JSON', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(1174, 1170, 'form:import', '导入表单JSON', 'BUTTON', NULL, 13, 1, '导入表单设计JSON', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(1175, 1170, 'form:jump:designer', '跳转流程设计', 'BUTTON', NULL, 14, 1, '从表单设计跳转流程设计', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
-INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID, CREATE_TIME)
+UPDATE `SYS_PERMISSION` SET `SORT_NO` = `SORT_NO` + 1 WHERE `PERMISSION_CODE` IN ('menu:process', 'menu:task', 'menu:sys:user', 'menu:sys:role', 'menu:sys:permission', 'menu:sys:dept');
+
 INSERT INTO `SYS_USER_ROLE` (`USER_ID`, `ROLE_ID`, `CREATE_TIME`)
 VALUES (1001, 1001, CURRENT_TIMESTAMP);
 

@@ -1,5 +1,5 @@
 server:
-  port: 58082
+  port: 38082
 spring:
   application:
     name: wcdk-process

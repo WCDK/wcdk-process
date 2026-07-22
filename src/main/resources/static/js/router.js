@@ -12,6 +12,7 @@ window.AppRouter = new VueRouter({
         { path: "/deploy", component: window.DeployCenter, meta: { permissionCode: "menu:deploy" } },
         { path: "/model", component: window.ModelCenter, meta: { permissionCode: "menu:model" } },
         { path: "/designer", component: window.ProcessDesigner, meta: { permissionCode: "menu:designer" } },
+        { path: "/form-designer", component: window.FormDesigner, meta: { permissionCode: "menu:form" } },
         { path: "/process", component: window.ProcessCenter, meta: { permissionCode: "menu:process" } },
         { path: "/task", component: window.TaskCenter, meta: { permissionCode: "menu:task" } },
         { path: "/client", component: window.ClientCenter, meta: { permissionCode: "client:view" } },

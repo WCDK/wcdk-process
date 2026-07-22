@@ -93,6 +93,21 @@
         return headers;
     }
 
+    function installFetchAuthInterceptor() {
+        if (!window.fetch || window.fetch.__wcdkAuthInterceptor) {
+            return;
+        }
+        var originalFetch = window.fetch.bind(window);
+        var interceptedFetch = function (input, init) {
+            var requestOptions = Object.assign({}, init || {});
+            var sourceHeaders = requestOptions.headers || (input && input.headers);
+            requestOptions.headers = buildHeaders({ headers: sourceHeaders });
+            return originalFetch(input, requestOptions);
+        };
+        interceptedFetch.__wcdkAuthInterceptor = true;
+        window.fetch = interceptedFetch;
+    }
+
     function handleUnauthorized(response, result) {
         if (response.status === 401 || (result && result.code === 401)) {
             clearAuth();
@@ -221,6 +236,8 @@
             return item.permissionCode === permissionCode;
         });
     }
+
+    installFetchAuthInterceptor();
 
     window.AppService = {
         request: request,

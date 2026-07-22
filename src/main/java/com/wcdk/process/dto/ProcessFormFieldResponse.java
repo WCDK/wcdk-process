@@ -27,6 +27,10 @@ public class ProcessFormFieldResponse {
 
     private Integer rows;
 
+    private Integer tableRows;
+
+    private Integer tableColumns;
+
     private Integer sortOrder;
 
     private String sourceNodeId;
@@ -34,4 +38,6 @@ public class ProcessFormFieldResponse {
     private String sourceNodeName;
 
     private List<ProcessFormOptionResponse> options;
+
+    private List<ProcessFormTableCellResponse> children;
 }

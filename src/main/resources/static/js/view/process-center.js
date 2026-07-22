@@ -3,6 +3,184 @@
  * @date 2026/7/15
  * @version 1.0
  **/
+window.DynamicProcessFormField = {
+    name: "dynamic-process-form-field",
+    props: {
+        field: {
+            type: Object,
+            required: true
+        },
+        formValues: {
+            type: Object,
+            required: true
+        },
+        nested: {
+            type: Boolean,
+            default: false
+        }
+    },
+    template: `
+        <div class="dynamic-process-field" :class="{ 'dynamic-process-field-nested': nested }">
+            <div v-if="isTableField(field)" class="dynamic-process-table">
+                <div class="dynamic-process-table-title">{{ field.label }}</div>
+                <div class="dynamic-process-table-grid" :style="resolveTableGridStyle(field)">
+                    <div
+                        v-for="cell in resolveTableCells(field)"
+                        :key="field.fieldKey + '-' + cell.row + '-' + cell.column"
+                        class="dynamic-process-table-cell">
+                        <dynamic-process-form-field
+                            v-for="child in cell.fields || []"
+                            :key="child.fieldKey"
+                            :field="child"
+                            :form-values="formValues"
+                            :nested="true">
+                        </dynamic-process-form-field>
+                    </div>
+                </div>
+                <div class="helper-text" v-if="field.sourceNodeName">
+                    来源节点：{{ field.sourceNodeName }}
+                </div>
+            </div>
+            <el-form-item v-else :label="field.label">
+                <el-input
+                    v-if="isInputField(field)"
+                    v-model.trim="formValues[field.fieldKey]"
+                    :placeholder="field.placeholder"
+                    :readonly="field.readOnly">
+                </el-input>
+                <el-input
+                    v-else-if="isNumberField(field)"
+                    v-model.number="formValues[field.fieldKey]"
+                    type="number"
+                    :placeholder="field.placeholder"
+                    :readonly="field.readOnly">
+                </el-input>
+                <el-input
+                    v-else-if="isTextareaField(field)"
+                    v-model="formValues[field.fieldKey]"
+                    type="textarea"
+                    :rows="field.rows || 4"
+                    :placeholder="field.placeholder"
+                    :readonly="field.readOnly">
+                </el-input>
+                <el-select
+                    v-else-if="isSelectField(field)"
+                    v-model="formValues[field.fieldKey]"
+                    :placeholder="field.placeholder"
+                    :disabled="field.readOnly"
+                    style="width: 100%;">
+                    <el-option
+                        v-for="option in field.options || []"
+                        :key="field.fieldKey + '-' + option.value"
+                        :label="option.label"
+                        :value="option.value">
+                    </el-option>
+                </el-select>
+                <el-checkbox
+                    v-else-if="isCheckboxField(field)"
+                    v-model="formValues[field.fieldKey]"
+                    :disabled="field.readOnly">
+                    {{ field.placeholder || field.label }}
+                </el-checkbox>
+                <el-switch
+                    v-else-if="isSwitchField(field)"
+                    v-model="formValues[field.fieldKey]"
+                    active-text="启用"
+                    inactive-text="关闭"
+                    :active-value="true"
+                    :inactive-value="false"
+                    :disabled="field.readOnly">
+                </el-switch>
+                <el-date-picker
+                    v-else-if="isDateField(field)"
+                    v-model="formValues[field.fieldKey]"
+                    type="date"
+                    value-format="yyyy-MM-dd"
+                    :placeholder="field.placeholder"
+                    :disabled="field.readOnly"
+                    style="width: 100%;">
+                </el-date-picker>
+                <div v-else-if="isTextField(field)" class="helper-text">
+                    {{ field.defaultValue || field.placeholder || field.label }}
+                </div>
+                <el-input
+                    v-else
+                    v-model="formValues[field.fieldKey]"
+                    :placeholder="field.placeholder"
+                    :readonly="field.readOnly">
+                </el-input>
+                <div class="helper-text" v-if="field.sourceNodeName">
+                    来源节点：{{ field.sourceNodeName }}
+                    <span v-if="field.required"> | 必填</span>
+                </div>
+            </el-form-item>
+        </div>
+    `,
+    methods: {
+        isTableField: function (field) {
+            return field.componentType === "table" || field.type === "table";
+        },
+        isInputField: function (field) {
+            return !field.componentType || field.componentType === "input";
+        },
+        isTextareaField: function (field) {
+            return field.componentType === "textarea";
+        },
+        isNumberField: function (field) {
+            return field.componentType === "number";
+        },
+        isSelectField: function (field) {
+            return field.componentType === "select" || field.componentType === "radio";
+        },
+        isCheckboxField: function (field) {
+            return field.componentType === "checkbox";
+        },
+        isSwitchField: function (field) {
+            return field.componentType === "switch";
+        },
+        isDateField: function (field) {
+            return field.componentType === "date";
+        },
+        isTextField: function (field) {
+            return field.componentType === "text";
+        },
+        resolveTableCells: function (field) {
+            var rows = Math.max(1, field.tableRows || 1);
+            var columns = Math.max(1, field.tableColumns || 1);
+            var sourceCells = field.children || [];
+            var cells = [];
+            for (var rowIndex = 0; rowIndex < rows; rowIndex += 1) {
+                for (var columnIndex = 0; columnIndex < columns; columnIndex += 1) {
+                    cells.push(this.findTableCell(sourceCells, rowIndex, columnIndex) || {
+                        row: rowIndex,
+                        column: columnIndex,
+                        fields: []
+                    });
+                }
+            }
+            return cells;
+        },
+        findTableCell: function (cells, row, column) {
+            for (var index = 0; index < cells.length; index += 1) {
+                if (cells[index] && cells[index].row === row && cells[index].column === column) {
+                    return cells[index];
+                }
+            }
+            return null;
+        },
+        resolveTableGridStyle: function (field) {
+            var columns = Math.max(1, field.tableColumns || 1);
+            return {
+                gridTemplateColumns: "repeat(" + columns + ", minmax(160px, 1fr))"
+            };
+        }
+    }
+};
+
+if (window && window.Vue && typeof window.Vue.component === "function") {
+    window.Vue.component("dynamic-process-form-field", window.DynamicProcessFormField);
+}
+
 window.ProcessCenter = {
     template: `
         <section class="route-section">
@@ -47,71 +225,13 @@ window.ProcessCenter = {
                                         </el-form-item>
                                     </div>
 
-                                    <div v-if="dynamicFormFields.length" class="form-grid two-columns">
-                                        <el-form-item
+                                    <div v-if="dynamicFormFields.length" class="form-grid two-columns dynamic-process-form-grid">
+                                        <dynamic-process-form-field
                                             v-for="field in dynamicFormFields"
                                             :key="field.fieldKey"
-                                            :label="field.label">
-                                            <el-input
-                                                v-if="isInputField(field)"
-                                                v-model.trim="formValues[field.fieldKey]"
-                                                :placeholder="field.placeholder"
-                                                :readonly="field.readOnly">
-                                            </el-input>
-                                            <el-input
-                                                v-else-if="isNumberField(field)"
-                                                v-model.number="formValues[field.fieldKey]"
-                                                type="number"
-                                                :placeholder="field.placeholder"
-                                                :readonly="field.readOnly">
-                                            </el-input>
-                                            <el-input
-                                                v-else-if="isTextareaField(field)"
-                                                v-model="formValues[field.fieldKey]"
-                                                type="textarea"
-                                                :rows="field.rows || 4"
-                                                :placeholder="field.placeholder"
-                                                :readonly="field.readOnly">
-                                            </el-input>
-                                            <el-select
-                                                v-else-if="isSelectField(field)"
-                                                v-model="formValues[field.fieldKey]"
-                                                :placeholder="field.placeholder"
-                                                :disabled="field.readOnly"
-                                                style="width: 100%;">
-                                                <el-option
-                                                    v-for="option in field.options || []"
-                                                    :key="field.fieldKey + '-' + option.value"
-                                                    :label="option.label"
-                                                    :value="option.value">
-                                                </el-option>
-                                            </el-select>
-                                            <el-checkbox
-                                                v-else-if="isCheckboxField(field)"
-                                                v-model="formValues[field.fieldKey]"
-                                                :disabled="field.readOnly">
-                                                {{ field.placeholder || field.label }}
-                                            </el-checkbox>
-                                            <el-date-picker
-                                                v-else-if="isDateField(field)"
-                                                v-model="formValues[field.fieldKey]"
-                                                type="date"
-                                                value-format="yyyy-MM-dd"
-                                                :placeholder="field.placeholder"
-                                                :disabled="field.readOnly"
-                                                style="width: 100%;">
-                                            </el-date-picker>
-                                            <el-input
-                                                v-else
-                                                v-model="formValues[field.fieldKey]"
-                                                :placeholder="field.placeholder"
-                                                :readonly="field.readOnly">
-                                            </el-input>
-                                            <div class="helper-text" v-if="field.sourceNodeName">
-                                                来源节点：{{ field.sourceNodeName }}
-                                                <span v-if="field.required"> | 必填</span>
-                                            </div>
-                                        </el-form-item>
+                                            :field="field"
+                                            :form-values="formValues">
+                                        </dynamic-process-form-field>
                                     </div>
 
                                     <div class="empty-panel process-schema-empty" v-else>
@@ -905,8 +1025,10 @@ window.ProcessCenter = {
                 number: "数字",
                 select: "下拉选择",
                 checkbox: "复选框",
+                switch: "开关",
                 radio: "单选框",
-                date: "日期"
+                date: "日期",
+                table: "表格"
             };
             return mapping[field.componentType] || field.componentType || field.dataType || "字段";
         },
@@ -997,14 +1119,18 @@ window.ProcessCenter = {
         isCheckboxField: function (field) {
             return field.componentType === "checkbox";
         },
+        isSwitchField: function (field) {
+            return field.componentType === "switch";
+        },
         isDateField: function (field) {
             return field.componentType === "date";
         },
         applyDynamicDefaults: function () {
             var nextValues = {};
-            for (var i = 0; i < this.dynamicFormFields.length; i += 1) {
-                var field = this.dynamicFormFields[i];
-                if (field.componentType === "checkbox") {
+            var fields = this.flattenDynamicFormFields(this.dynamicFormFields);
+            for (var i = 0; i < fields.length; i += 1) {
+                var field = fields[i];
+                if (field.componentType === "checkbox" || field.componentType === "switch") {
                     nextValues[field.fieldKey] = field.defaultValue === true || field.defaultValue === "true";
                     continue;
                 }
@@ -1019,6 +1145,31 @@ window.ProcessCenter = {
                     : "";
             }
             this.formValues = nextValues;
+        },
+        flattenDynamicFormFields: function (fields) {
+            var results = [];
+            for (var i = 0; i < (fields || []).length; i += 1) {
+                var field = fields[i];
+                if (!field) {
+                    continue;
+                }
+                if (field.componentType === "table" || field.type === "table") {
+                    var cells = field.children || [];
+                    for (var cellIndex = 0; cellIndex < cells.length; cellIndex += 1) {
+                        results = results.concat(this.flattenDynamicFormFields(cells[cellIndex].fields || []));
+                    }
+                    continue;
+                }
+                if (field.componentType === "group" || field.type === "group") {
+                    results = results.concat(this.flattenDynamicFormFields(field.children || []));
+                    continue;
+                }
+                if (field.componentType === "button" || field.type === "button" || !field.fieldKey) {
+                    continue;
+                }
+                results.push(field);
+            }
+            return results;
         },
         resetForm: function () {
             this.form.taskName = "";
@@ -1038,8 +1189,9 @@ window.ProcessCenter = {
             if (!this.form.taskName) {
                 return "任务名称不能为空";
             }
-            for (var i = 0; i < this.dynamicFormFields.length; i += 1) {
-                var field = this.dynamicFormFields[i];
+            var fields = this.flattenDynamicFormFields(this.dynamicFormFields);
+            for (var i = 0; i < fields.length; i += 1) {
+                var field = fields[i];
                 if (!field.required) {
                     continue;
                 }
