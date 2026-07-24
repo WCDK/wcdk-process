@@ -17,12 +17,9 @@ spring:
   datasource:
     type: com.alibaba.druid.pool.DruidDataSource
     driver-class-name: dm.jdbc.driver.DmDriver
-    url: jdbc:dm://localhost:25236/QXTD-PROCESS
-    username: QXTD-PROCESS
-    password: Qxtd@2026
-#    url: jdbc:dm://192.168.10.12:5237/ISSAM-PROCESS
-#    username: SYSDBA
-#    password: SysDba001
+    url: jdbc:dm://localhost:25236/WCDK-PROCESS
+    username: SYSDBA
+    password: SysDba001
     druid:
       initial-size: 5
       max-active: 20
