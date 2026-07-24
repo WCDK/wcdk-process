@@ -22,7 +22,7 @@ window.FormDesigner = {
                     </div>
                 </div>
 
-                <el-tabs v-model="activeTab" class="center-tabs">
+                <el-tabs v-model="activeTab" class="center-tabs" @tab-click="handleTabClick">
                     <el-tab-pane label="表单设计" name="design">
                         <el-form label-position="top" class="panel-form" @submit.native.prevent="saveSchema">
                             <div class="form-grid two-columns">
@@ -57,6 +57,15 @@ window.FormDesigner = {
                                 <el-form-item label="表单标识">
                                     <el-input v-model.trim="filters.formKey" placeholder="请输入表单标识"></el-input>
                                 </el-form-item>
+                                <el-form-item label="已绑定流程">
+                                    <el-select v-model="filters.boundProcess" clearable placeholder="请选择">
+                                        <el-option label="已绑定" :value="true"></el-option>
+                                        <el-option label="未绑定" :value="false"></el-option>
+                                    </el-select>
+                                </el-form-item>
+                                <el-form-item label="流程节点">
+                                    <el-input v-model.trim="filters.processNode" placeholder="请输入节点ID或名称"></el-input>
+                                </el-form-item>
                                 <el-form-item>
                                     <el-button type="primary" @click="handleQuery">查询</el-button>
                                     <el-button @click="handleResetQuery">重置</el-button>
@@ -70,6 +79,16 @@ window.FormDesigner = {
                                 @sort-change="handleSortChange">
                                 <el-table-column prop="formName" label="表单名称" min-width="180" sortable="custom"></el-table-column>
                                 <el-table-column prop="formKey" label="表单标识" min-width="180" sortable="custom"></el-table-column>
+                                <el-table-column prop="boundProcess" label="已绑定流程" width="120" sortable="custom">
+                                    <template slot-scope="scope">
+                                        <el-tag :type="scope.row.boundProcess ? 'success' : 'info'" size="mini">
+                                            {{ scope.row.boundProcess ? '已绑定' : '未绑定' }}
+                                        </el-tag>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column prop="processDefinitionId" label="流程定义ID" min-width="220" sortable="custom" show-overflow-tooltip></el-table-column>
+                                <el-table-column prop="processNodeId" label="流程节点ID" min-width="160" sortable="custom" show-overflow-tooltip></el-table-column>
+                                <el-table-column prop="processNodeName" label="流程节点名称" min-width="160" sortable="custom" show-overflow-tooltip></el-table-column>
                                 <el-table-column prop="fieldCount" label="字段数量" width="110" sortable="custom"></el-table-column>
                                 <el-table-column prop="updateTime" label="更新时间" min-width="180" sortable="custom">
                                     <template slot-scope="scope">
@@ -128,6 +147,7 @@ window.FormDesigner = {
     data: function () {
         return {
             activeTab: "design",
+            listLoaded: false,
             storageKey: "wcdk_process_form_designer_schema",
             listStorageKey: "wcdk_process_form_designer_schema_list",
             formMeta: {
@@ -138,7 +158,9 @@ window.FormDesigner = {
             formRecords: [],
             filters: {
                 formName: "",
-                formKey: ""
+                formKey: "",
+                boundProcess: "",
+                processNode: ""
             },
             pageNum: 1,
             pageSize: 10,
@@ -191,7 +213,7 @@ window.FormDesigner = {
                 })
             });
             window.localStorage.setItem(this.storageKey, JSON.stringify(fields));
-            await this.refreshFormList();
+            this.listLoaded = false;
             this.$root.showSuccess("表单方案保存成功");
             this.confirmClearCurrentSchema();
         },
@@ -271,12 +293,19 @@ window.FormDesigner = {
             if (this.filters.formKey) {
                 query += "&formKey=" + encodeURIComponent(this.filters.formKey);
             }
+            if (this.filters.boundProcess !== "" && this.filters.boundProcess !== null && this.filters.boundProcess !== undefined) {
+                query += "&boundProcess=" + encodeURIComponent(this.filters.boundProcess);
+            }
+            if (this.filters.processNode) {
+                query += "&processNode=" + encodeURIComponent(this.filters.processNode);
+            }
             this.listLoading = true;
             try {
                 var result = await window.AppService.request("/process/form/list" + query);
                 var pageData = result.data || {};
                 this.formRecords = pageData.records || [];
                 this.total = Number(pageData.total || 0);
+                this.listLoaded = true;
                 if (this.total > 0 && (this.pageNum - 1) * this.pageSize >= this.total) {
                     this.pageNum = 1;
                     await this.refreshFormList();
@@ -289,9 +318,16 @@ window.FormDesigner = {
             this.pageNum = 1;
             this.refreshFormList();
         },
+        handleTabClick: function () {
+            if (this.activeTab === "list" && !this.listLoaded) {
+                this.refreshFormList();
+            }
+        },
         handleResetQuery: function () {
             this.filters.formName = "";
             this.filters.formKey = "";
+            this.filters.boundProcess = "";
+            this.filters.processNode = "";
             this.pageNum = 1;
             this.sortProp = "updateTime";
             this.sortOrder = "descending";
@@ -325,6 +361,9 @@ window.FormDesigner = {
                 if (prop === "fieldCount") {
                     leftValue = Number(leftValue || 0);
                     rightValue = Number(rightValue || 0);
+                } else if (prop === "boundProcess") {
+                    leftValue = leftValue ? 1 : 0;
+                    rightValue = rightValue ? 1 : 0;
                 } else if (prop === "createTime" || prop === "updateTime") {
                     leftValue = leftValue ? new Date(leftValue).getTime() : 0;
                     rightValue = rightValue ? new Date(rightValue).getTime() : 0;
@@ -386,7 +425,6 @@ window.FormDesigner = {
         }
     },
     mounted: function () {
-        this.refreshFormList();
         // this.loadLatestSchema();
     }
 };

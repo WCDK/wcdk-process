@@ -6,6 +6,8 @@
 (function () {
     var canvasFormDesignerStyleId = "canvas-form-designer-inline-style";
     var canvasFormDesignerComponentFiles = [
+        "component/canvas-form-group.js",
+        "component/canvas-form-label.js",
         "component/canvas-form-input.js",
         "component/canvas-form-textarea.js",
         "component/canvas-form-number.js",
@@ -18,7 +20,6 @@
         "component/canvas-form-text.js",
         "component/canvas-form-button.js",
         "component/canvas-form-data-table.js",
-        "component/canvas-form-group.js"
     ];
 
     window.CanvasFormDesignerComponentRegistry = window.CanvasFormDesignerComponentRegistry || {

@@ -174,7 +174,8 @@ window.PermissionCenter = {
             }
         };
     },
-    mounted: function () {
+    mounted: async function () {
+        await this.$root.loadPermissionsOption();
         this.queryList();
     },
     methods: {

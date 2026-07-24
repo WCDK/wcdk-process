@@ -4,6 +4,9 @@ import com.wcdk.process.common.ApiResponse;
 import com.wcdk.process.common.PageResponse;
 import com.wcdk.process.context.AuthContextHolder;
 import com.wcdk.process.dto.WcdkProcessClientResponse;
+import com.wcdk.process.dto.WcdkProcessConnectionEvent;
+import com.wcdk.process.dto.WcdkProcessRpcCallbackResponse;
+import com.wcdk.process.service.WcdkProcessClientCallbackService;
 import com.wcdk.process.service.WcdkProcessClientRegistryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -12,9 +15,12 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /**
  * @auther WCDK
@@ -28,6 +34,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class WcdkProcessClientController {
 
     private final WcdkProcessClientRegistryService wcdkProcessClientRegistryService;
+
+    private final WcdkProcessClientCallbackService wcdkProcessClientCallbackService;
 
     @GetMapping("/list")
     @Operation(summary = "分页查询客户端", description = "按客户端标识、名称、回调地址和流程处理器分页查询已注册客户端信息")
@@ -61,6 +69,13 @@ public class WcdkProcessClientController {
             return ApiResponse.success("客户端存活", true);
         }
         return ApiResponse.success("客户端未存活", false);
+    }
+
+    @PostMapping("/rpc/callback")
+    @Operation(summary = "RPC回调客户端", description = "按流程定义绑定关系同步调用客户端流程处理器并返回客户端处理结果")
+    public ApiResponse<List<WcdkProcessRpcCallbackResponse>> rpcCallback(@RequestBody WcdkProcessConnectionEvent request) {
+        AuthContextHolder.requirePermission("client:view");
+        return ApiResponse.success("RPC回调执行完成", wcdkProcessClientCallbackService.rpcCallback(request));
     }
 
     @DeleteMapping("/{clientId}")

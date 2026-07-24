@@ -24,6 +24,10 @@ public class ProcessDesignerExportRequest {
 
     private Integer canvasHeight;
 
+    private String processId;
+
+    private String processName;
+
     private List<ProcessDesignerExportNodeRequest> nodes;
 
     private List<ProcessDesignerExportEdgeRequest> edges;

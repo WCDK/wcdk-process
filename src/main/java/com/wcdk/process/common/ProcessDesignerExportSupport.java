@@ -126,6 +126,8 @@ public class ProcessDesignerExportSupport {
         return ExportContext.builder()
                 .canvasWidth(request.getCanvasWidth() == null ? 2400 : request.getCanvasWidth())
                 .canvasHeight(request.getCanvasHeight() == null ? 1400 : request.getCanvasHeight())
+                .processId(request.getProcessId())
+                .processName(request.getProcessName())
                 .nodes(exportableNodes)
                 .edges(copyEdges(sourceEdges))
                 .nodeLookup(nodeLookup)
@@ -245,7 +247,8 @@ public class ProcessDesignerExportSupport {
 
     private String buildBpmnXml(ExportContext context) {
         Map<String, Boolean> usedIds = new LinkedHashMap<>();
-        String processId = sanitizeBpmnId("Wcdk_" + System.currentTimeMillis(), "Process", usedIds);
+        String processId = sanitizeBpmnId(firstText(context.getProcessId(), "Wcdk_" + System.currentTimeMillis()), "Process", usedIds);
+        String processName = firstText(context.getProcessName(), "wcdk-process-" + processId);
         String definitionsId = sanitizeBpmnId("Definitions_" + System.currentTimeMillis(), "Definitions", usedIds);
         String diagramId = sanitizeBpmnId(processId + "_Diagram", "Diagram", usedIds);
         String planeId = sanitizeBpmnId(processId + "_Plane", "Plane", usedIds);
@@ -257,6 +260,7 @@ public class ProcessDesignerExportSupport {
             nodeIdMap.put(node.getId(), sanitizeBpmnId(firstText(node.getCode(), node.getId()), "FlowNode", usedIds));
         }
         List<SequenceFlowExport> sequenceFlows = buildSequenceFlows(context, nodeIdMap, usedIds, incomingMap, outgoingMap);
+        addParallelJoinGateways(context, sequenceFlows, usedIds, incomingMap, outgoingMap, nodeIdMap);
         ContainerMaps containerMaps = buildFlowContainerMaps(context.getNodes(), sequenceFlows);
         List<String> lines = new ArrayList<>();
         lines.add("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
@@ -267,7 +271,7 @@ public class ProcessDesignerExportSupport {
         lines.add("                  xmlns:di=\"http://www.omg.org/spec/DD/20100524/DI\"");
         lines.add("                  id=\"" + definitionsId + "\"");
         lines.add("                  targetNamespace=\"http://flowable.org/processdef\">");
-        lines.add("  <bpmn:process id=\"" + processId + "\" name=\"wcdk-process-" + processId + "\" isExecutable=\"true\">");
+        lines.add("  <bpmn:process id=\"" + processId + "\" name=\"" + escapeXml(processName) + "\" isExecutable=\"true\">");
         appendContainerFlowElements(lines, "", containerMaps.getNodeChildrenMap(), containerMaps.getFlowChildrenMap(),
                 nodeTagMap, nodeIdMap, incomingMap, outgoingMap);
         lines.add("  </bpmn:process>");
@@ -367,6 +371,145 @@ public class ProcessDesignerExportSupport {
             incomingMap.computeIfAbsent(edge.getTargetId(), key -> new ArrayList<>()).add(flowId);
         }
         return sequenceFlows;
+    }
+
+    private void addParallelJoinGateways(ExportContext context,
+                                         List<SequenceFlowExport> sequenceFlows,
+                                         Map<String, Boolean> usedIds,
+                                         Map<String, List<String>> incomingMap,
+                                         Map<String, List<String>> outgoingMap,
+                                         Map<String, String> nodeIdMap) {
+        Map<String, SequenceFlowExport> flowLookup = buildFlowLookup(sequenceFlows);
+        List<Map.Entry<String, List<String>>> incomingEntries = new ArrayList<>(incomingMap.entrySet());
+        for (Map.Entry<String, List<String>> entry : incomingEntries) {
+            String targetNodeId = entry.getKey();
+            List<String> incomingFlowIds = new ArrayList<>(entry.getValue());
+            if (incomingFlowIds.size() <= 1 || !isParallelJoinTarget(context.getNodeLookup().get(targetNodeId))) {
+                continue;
+            }
+            if (!hasCommonParallelSplitAncestor(context, incomingFlowIds, flowLookup, outgoingMap)) {
+                continue;
+            }
+            ProcessDesignerExportNodeRequest targetNode = context.getNodeLookup().get(targetNodeId);
+            String joinNodeId = buildSyntheticJoinNodeId(targetNodeId, context.getNodeLookup());
+            ProcessDesignerExportNodeRequest joinNode = ProcessDesignerExportNodeRequest.builder()
+                    .id(joinNodeId)
+                    .type("parallelGateway")
+                    .bpmnType("parallelGateway")
+                    .kind("gateway")
+                    .label("自动并行汇聚")
+                    .name("自动并行汇聚")
+                    .code(joinNodeId)
+                    .parentId(targetNode.getParentId())
+                    .expanded(Boolean.TRUE)
+                    .width(56)
+                    .height(56)
+                    .x(Math.max(targetNode.getX() - 96, 0))
+                    .y(targetNode.getY() + Math.max((targetNode.getHeight() - 56) / 2, 0))
+                    .build();
+            context.getNodes().add(joinNode);
+            context.getNodeLookup().put(joinNodeId, joinNode);
+            nodeIdMap.put(joinNodeId, sanitizeBpmnId(joinNodeId, "ParallelJoin", usedIds));
+            for (String incomingFlowId : incomingFlowIds) {
+                SequenceFlowExport incomingFlow = flowLookup.get(incomingFlowId);
+                if (incomingFlow == null) {
+                    continue;
+                }
+                incomingFlow.setTargetId(joinNodeId);
+            }
+            String joinFlowId = sanitizeBpmnId("Flow_" + joinNodeId + "_" + targetNodeId, "SequenceFlow", usedIds);
+            SequenceFlowExport joinFlow = SequenceFlowExport.builder()
+                    .id(joinFlowId)
+                    .sourceId(joinNodeId)
+                    .targetId(targetNodeId)
+                    .containerId(resolveNodeContainerId(targetNode))
+                    .build();
+            sequenceFlows.add(joinFlow);
+            flowLookup.put(joinFlowId, joinFlow);
+            incomingMap.put(joinNodeId, incomingFlowIds);
+            outgoingMap.put(joinNodeId, new ArrayList<>(List.of(joinFlowId)));
+            incomingMap.put(targetNodeId, new ArrayList<>(List.of(joinFlowId)));
+        }
+    }
+
+    private Map<String, SequenceFlowExport> buildFlowLookup(List<SequenceFlowExport> sequenceFlows) {
+        Map<String, SequenceFlowExport> flowLookup = new LinkedHashMap<>();
+        for (SequenceFlowExport flow : sequenceFlows) {
+            flowLookup.put(flow.getId(), flow);
+        }
+        return flowLookup;
+    }
+
+    private boolean isParallelJoinTarget(ProcessDesignerExportNodeRequest targetNode) {
+        return targetNode != null
+                && !"parallelGateway".equals(targetNode.getBpmnType())
+                && !"exclusiveGateway".equals(targetNode.getBpmnType())
+                && !"inclusiveGateway".equals(targetNode.getBpmnType())
+                && !"eventGateway".equals(targetNode.getBpmnType());
+    }
+
+    private boolean hasCommonParallelSplitAncestor(ExportContext context,
+                                                   List<String> incomingFlowIds,
+                                                   Map<String, SequenceFlowExport> flowLookup,
+                                                   Map<String, List<String>> outgoingMap) {
+        Set<String> commonAncestorIds = null;
+        for (String incomingFlowId : incomingFlowIds) {
+            SequenceFlowExport incomingFlow = flowLookup.get(incomingFlowId);
+            if (incomingFlow == null || !StringUtils.hasText(incomingFlow.getSourceId())) {
+                return false;
+            }
+            Set<String> ancestorIds = collectParallelSplitAncestors(context, incomingFlow.getSourceId(), flowLookup, outgoingMap);
+            if (commonAncestorIds == null) {
+                commonAncestorIds = new LinkedHashSet<>(ancestorIds);
+            } else {
+                commonAncestorIds.retainAll(ancestorIds);
+            }
+            if (commonAncestorIds.isEmpty()) {
+                return false;
+            }
+        }
+        return commonAncestorIds != null && !commonAncestorIds.isEmpty();
+    }
+
+    private Set<String> collectParallelSplitAncestors(ExportContext context,
+                                                      String nodeId,
+                                                      Map<String, SequenceFlowExport> flowLookup,
+                                                      Map<String, List<String>> outgoingMap) {
+        Set<String> ancestorIds = new LinkedHashSet<>();
+        collectParallelSplitAncestors(context, nodeId, flowLookup, outgoingMap, ancestorIds, new LinkedHashSet<>());
+        return ancestorIds;
+    }
+
+    private void collectParallelSplitAncestors(ExportContext context,
+                                               String nodeId,
+                                               Map<String, SequenceFlowExport> flowLookup,
+                                               Map<String, List<String>> outgoingMap,
+                                               Set<String> ancestorIds,
+                                               Set<String> visitedNodeIds) {
+        if (!StringUtils.hasText(nodeId) || !visitedNodeIds.add(nodeId)) {
+            return;
+        }
+        ProcessDesignerExportNodeRequest node = context.getNodeLookup().get(nodeId);
+        if (node != null && "parallelGateway".equals(node.getBpmnType())
+                && outgoingMap.getOrDefault(nodeId, List.of()).size() > 1) {
+            ancestorIds.add(nodeId);
+        }
+        for (SequenceFlowExport flow : flowLookup.values()) {
+            if (flow != null && nodeId.equals(flow.getTargetId())) {
+                collectParallelSplitAncestors(context, flow.getSourceId(), flowLookup, outgoingMap, ancestorIds, visitedNodeIds);
+            }
+        }
+    }
+
+    private String buildSyntheticJoinNodeId(String targetNodeId, Map<String, ProcessDesignerExportNodeRequest> nodeLookup) {
+        String baseId = "AutoJoin_" + targetNodeId;
+        String candidate = baseId;
+        int index = 1;
+        while (nodeLookup.containsKey(candidate)) {
+            candidate = baseId + "_" + index;
+            index += 1;
+        }
+        return candidate;
     }
 
     private void validateExclusiveGatewayCondition(ProcessDesignerExportNodeRequest sourceNode,
@@ -839,6 +982,10 @@ public class ProcessDesignerExportSupport {
         private Integer canvasWidth;
 
         private Integer canvasHeight;
+
+        private String processId;
+
+        private String processName;
 
         private List<ProcessDesignerExportNodeRequest> nodes;
 

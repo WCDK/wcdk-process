@@ -14,10 +14,17 @@ import com.wcdk.process.dto.ProcessFormFieldResponse;
 import com.wcdk.process.dto.ProcessFormOptionResponse;
 import com.wcdk.process.dto.ProcessFormTableCellResponse;
 import com.wcdk.process.dto.ProcessDefinitionResponse;
+import com.wcdk.process.dto.ProcessDefinitionUpdateRequest;
 import com.wcdk.process.entity.WcdkProcessClient;
 import com.wcdk.process.entity.WcdkProcessClientProcess;
+import com.wcdk.process.entity.WcdkProcessDefinitionMeta;
+import com.wcdk.process.entity.WcdkProcessForm;
+import com.wcdk.process.entity.WcdkProcessFormBinding;
 import com.wcdk.process.mapper.WcdkProcessClientMapper;
 import com.wcdk.process.mapper.WcdkProcessClientProcessMapper;
+import com.wcdk.process.mapper.WcdkProcessDefinitionMetaMapper;
+import com.wcdk.process.mapper.WcdkProcessFormBindingMapper;
+import com.wcdk.process.mapper.WcdkProcessFormMapper;
 import com.wcdk.process.service.FlowableDeployService;
 import com.wcdk.process.service.WcdkProcessClientRegistryService;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +42,7 @@ import org.flowable.engine.RepositoryService;
 import org.flowable.engine.repository.Deployment;
 import org.flowable.engine.repository.ProcessDefinition;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.FileCopyUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -55,6 +63,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -62,6 +71,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -96,6 +106,12 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
 
     private final WcdkProcessClientMapper wcdkProcessClientMapper;
 
+    private final WcdkProcessDefinitionMetaMapper wcdkProcessDefinitionMetaMapper;
+
+    private final WcdkProcessFormBindingMapper wcdkProcessFormBindingMapper;
+
+    private final WcdkProcessFormMapper wcdkProcessFormMapper;
+
     @Override
     public DeploymentResponse deployProcess(String deploymentName, String category, String clientId, String processBeanName, MultipartFile file) {
         if (file == null || file.isEmpty()) {
@@ -118,6 +134,7 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
                     .addBytes(resourceName, deployBytes)
                     .deploy();
             log.info("流程部署成功，部署ID：{}", deployment.getId());
+            initDeploymentDefinitionMeta(deployment.getId());
             bindDeploymentProcessDefinitions(deployment.getId(), validClientId, validProcessBeanName);
             return buildDeploymentResponse(deployment);
         } catch (IOException ex) {
@@ -140,12 +157,14 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
                 .collect(Collectors.groupingBy(ProcessDefinition::getDeploymentId));
         Map<String, List<WcdkProcessClientProcess>> bindingMap = listProcessBindingMap(processDefinitions);
         Map<String, String> clientNameMap = listClientNameMap(bindingMap);
+        Map<String, Integer> invalidStatusMap = listInvalidStatusMap(processDefinitions);
         return deployments.stream()
                 .map(deployment -> buildDeploymentResponse(
                         deployment,
                         deploymentDefinitionMap.getOrDefault(deployment.getId(), List.of()),
                         bindingMap,
-                        clientNameMap
+                        clientNameMap,
+                        invalidStatusMap
                 ))
                 .filter(deployment -> matchesDeploymentName(deployment, deploymentName))
                 .filter(deployment -> matchesCategory(deployment, category))
@@ -166,12 +185,14 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
                 .list();
         Map<String, List<WcdkProcessClientProcess>> bindingMap = listProcessBindingMap(processDefinitions);
         Map<String, String> clientNameMap = listClientNameMap(bindingMap);
+        Map<String, Integer> invalidStatusMap = listInvalidStatusMap(processDefinitions);
         return processDefinitions.stream()
                 .map(processDefinition -> buildProcessDefinitionResponse(
                         processDefinition,
                         deploymentCategoryMap.get(processDefinition.getDeploymentId()),
                         bindingMap.getOrDefault(processDefinition.getId(), List.of()),
-                        clientNameMap
+                        clientNameMap,
+                        invalidStatusMap.getOrDefault(processDefinition.getId(), 0)
                 ))
                 .toList();
     }
@@ -204,6 +225,7 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
                 .stream()
                 .map(sequenceFlow -> buildEdgeResponse(bpmnModel, sequenceFlow))
                 .toList();
+        fillNodeBoundForms(nodes, processDefinition);
         String bpmnXml = readBpmnXml(processDefinition);
         DynamicPageSchema dynamicPageSchema = buildDynamicPageSchema(bpmnXml, nodes, processDefinition.getKey());
         long userTaskCount = nodes.stream()
@@ -228,6 +250,140 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
                 .nodes(nodes)
                 .sequenceFlows(sequenceFlows)
                 .build();
+    }
+
+    private void fillNodeBoundForms(List<ProcessDiagramNodeResponse> nodes, ProcessDefinition processDefinition) {
+        if (nodes == null || nodes.isEmpty() || processDefinition == null || !StringUtils.hasText(processDefinition.getId())) {
+            return;
+        }
+        List<WcdkProcessFormBinding> bindings = wcdkProcessFormBindingMapper.selectList(new LambdaQueryWrapper<WcdkProcessFormBinding>()
+                .eq(WcdkProcessFormBinding::getProcessDefinitionId, processDefinition.getId())
+                .eq(WcdkProcessFormBinding::getStatus, 1)
+                .orderByDesc(WcdkProcessFormBinding::getUpdateTime));
+        if (bindings == null || bindings.isEmpty()) {
+            return;
+        }
+        List<Long> formIds = bindings.stream()
+                .map(WcdkProcessFormBinding::getFormId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (formIds.isEmpty()) {
+            return;
+        }
+        Map<Long, WcdkProcessForm> formMap = wcdkProcessFormMapper.selectBatchIds(formIds).stream()
+                .filter(form -> form != null && Objects.equals(form.getStatus(), 1))
+                .collect(Collectors.toMap(WcdkProcessForm::getId, form -> form, (left, right) -> right));
+        if (formMap.isEmpty()) {
+            return;
+        }
+        Map<String, List<Map<String, Object>>> nodeFormMap = new LinkedHashMap<>();
+        for (WcdkProcessFormBinding binding : bindings) {
+            if (binding == null || !StringUtils.hasText(binding.getTaskDefinitionKey())) {
+                continue;
+            }
+            WcdkProcessForm form = formMap.get(binding.getFormId());
+            if (form == null) {
+                continue;
+            }
+            nodeFormMap.computeIfAbsent(binding.getTaskDefinitionKey(), key -> new ArrayList<>())
+                    .add(buildNodeBoundForm(binding, form));
+        }
+        for (ProcessDiagramNodeResponse node : nodes) {
+            List<Map<String, Object>> boundForms = nodeFormMap.get(node.getElementId());
+            if (boundForms == null || boundForms.isEmpty()) {
+                continue;
+            }
+            List<String> formKeys = boundForms.stream()
+                    .map(form -> Objects.toString(form.get("formKey"), ""))
+                    .filter(StringUtils::hasText)
+                    .distinct()
+                    .toList();
+            node.setBoundForms(boundForms);
+            node.setBoundFormKeys(formKeys);
+            node.setFormKey(String.join(",", formKeys));
+        }
+    }
+
+    private Map<String, Object> buildNodeBoundForm(WcdkProcessFormBinding binding, WcdkProcessForm form) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        Object schema = parseBoundFormSchema(form.getFormSchemaJson());
+        result.put("formId", form.getId());
+        result.put("formKey", form.getFormKey());
+        result.put("formName", form.getFormName());
+        result.put("formVersion", form.getFormVersion());
+        result.put("processNodeId", binding.getTaskDefinitionKey());
+        result.put("fieldCount", schema instanceof List<?> ? ((List<?>) schema).size() : 0);
+        result.put("schema", schema);
+        return result;
+    }
+
+    private Object parseBoundFormSchema(String schemaJson) {
+        if (!StringUtils.hasText(schemaJson)) {
+            return List.of();
+        }
+        try {
+            Object schema = JSON.parse(schemaJson);
+            return schema == null ? List.of() : schema;
+        } catch (Exception ex) {
+            log.warn("Failed to parse bound form schema. schemaJson={}", schemaJson, ex);
+            return List.of();
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ProcessDefinitionDetailResponse updateProcessDefinition(ProcessDefinitionUpdateRequest request) {
+        if (request == null || !StringUtils.hasText(request.getProcessDefinitionId())) {
+            throw new IllegalArgumentException("流程定义ID不能为空");
+        }
+        if (!StringUtils.hasText(request.getBpmnXml())) {
+            throw new IllegalArgumentException("BPMN XML 内容不能为空");
+        }
+        String oldProcessDefinitionId = request.getProcessDefinitionId().trim();
+        ProcessDefinition oldProcessDefinition = repositoryService.createProcessDefinitionQuery()
+                .processDefinitionId(oldProcessDefinitionId)
+                .singleResult();
+        if (oldProcessDefinition == null) {
+            throw new IllegalArgumentException("未查询到对应流程定义，流程定义ID：" + oldProcessDefinitionId);
+        }
+        String sourceDeploymentId = StringUtils.hasText(request.getDeploymentId())
+                ? request.getDeploymentId().trim()
+                : oldProcessDefinition.getDeploymentId();
+        Deployment oldDeployment = repositoryService.createDeploymentQuery()
+                .deploymentId(sourceDeploymentId)
+                .singleResult();
+        if (oldDeployment == null) {
+            throw new IllegalArgumentException("未查询到对应部署，部署ID：" + sourceDeploymentId);
+        }
+        try {
+            BpmnModel bpmnModel = parseBpmnModel(request.getBpmnXml().getBytes(StandardCharsets.UTF_8));
+            validateBpmnModel(bpmnModel);
+            validateUpdateProcessDefinitionKey(bpmnModel, oldProcessDefinition);
+            String resourceName = StringUtils.hasText(oldProcessDefinition.getResourceName())
+                    ? oldProcessDefinition.getResourceName()
+                    : bpmnModel.getMainProcess().getId() + ".bpmn20.xml";
+            byte[] deployBytes = new BpmnXMLConverter().convertToXML(bpmnModel, StandardCharsets.UTF_8.name());
+            Deployment newDeployment = repositoryService.createDeployment()
+                    .name(oldDeployment.getName())
+                    .category(oldDeployment.getCategory())
+                    .addBytes(resourceName, deployBytes)
+                    .deploy();
+            ProcessDefinition newProcessDefinition = repositoryService.createProcessDefinitionQuery()
+                    .deploymentId(newDeployment.getId())
+                    .processDefinitionKey(oldProcessDefinition.getKey())
+                    .singleResult();
+            if (newProcessDefinition == null) {
+                throw new IllegalArgumentException("流程修改后未生成新版本流程定义");
+            }
+            markProcessDefinitionInvalid(oldProcessDefinition.getId());
+            ensureProcessDefinitionMeta(newProcessDefinition, 0);
+            copyProcessClientBindings(oldProcessDefinition.getId(), newProcessDefinition);
+            return getProcessDefinitionDetail(newProcessDefinition.getId());
+        } catch (XMLStreamException ex) {
+            log.error("修改流程定义时解析 BPMN 失败", ex);
+            throw new IllegalArgumentException("解析 BPMN 文件失败");
+        }
     }
 
     @Override
@@ -261,6 +417,7 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void deleteDeployment(String deploymentId, Boolean cascade) {
         if (!StringUtils.hasText(deploymentId)) {
             throw new IllegalArgumentException("部署ID不能为空");
@@ -272,6 +429,15 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
             throw new IllegalArgumentException("未查询到对应部署，部署ID：" + deploymentId);
         }
         log.info("开始删除流程部署，部署ID：{}，级联删除：{}", deploymentId, cascade);
+        List<String> processDefinitionIds = repositoryService.createProcessDefinitionQuery()
+                .deploymentId(deploymentId)
+                .list()
+                .stream()
+                .map(ProcessDefinition::getId)
+                .toList();
+        wcdkProcessFormBindingMapper.delete(new LambdaQueryWrapper<WcdkProcessFormBinding>()
+                .eq(WcdkProcessFormBinding::getDeploymentId, deploymentId)
+                .or(!processDefinitionIds.isEmpty(), wrapper -> wrapper.in(WcdkProcessFormBinding::getProcessDefinitionId, processDefinitionIds)));
         repositoryService.deleteDeployment(deploymentId, Boolean.TRUE.equals(cascade));
     }
 
@@ -368,6 +534,85 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
         if (!hasFlowNode) {
             throw new IllegalArgumentException("流程文件中未找到可绘制到画布的节点");
         }
+        validateParallelJoinBeforeUserTask(mainProcess);
+    }
+
+    private void validateParallelJoinBeforeUserTask(Process mainProcess) {
+        Map<String, FlowNode> nodeMap = collectFlowNodes(mainProcess).stream()
+                .filter(node -> StringUtils.hasText(node.getId()))
+                .collect(Collectors.toMap(FlowNode::getId, node -> node, (left, right) -> left, LinkedHashMap::new));
+        List<SequenceFlow> sequenceFlows = collectSequenceFlows(mainProcess);
+        Map<String, List<SequenceFlow>> incomingFlowMap = sequenceFlows.stream()
+                .filter(sequenceFlow -> StringUtils.hasText(sequenceFlow.getTargetRef()))
+                .collect(Collectors.groupingBy(SequenceFlow::getTargetRef, LinkedHashMap::new, Collectors.toList()));
+        Map<String, List<SequenceFlow>> outgoingFlowMap = sequenceFlows.stream()
+                .filter(sequenceFlow -> StringUtils.hasText(sequenceFlow.getSourceRef()))
+                .collect(Collectors.groupingBy(SequenceFlow::getSourceRef, LinkedHashMap::new, Collectors.toList()));
+        for (FlowNode targetNode : nodeMap.values()) {
+            List<SequenceFlow> incomingFlows = incomingFlowMap.getOrDefault(targetNode.getId(), List.of());
+            if (!isUserTaskNode(targetNode) || incomingFlows.size() <= 1) {
+                continue;
+            }
+            if (hasCommonParallelSplitAncestor(incomingFlows, nodeMap, incomingFlowMap, outgoingFlowMap)) {
+                throw new IllegalArgumentException("并行任务进入【" + resolveFlowNodeName(targetNode)
+                        + "】前必须先使用并行网关汇聚，避免任一并行分支通过后提前生成下一审批任务");
+            }
+        }
+    }
+
+    private boolean hasCommonParallelSplitAncestor(List<SequenceFlow> incomingFlows,
+                                                   Map<String, FlowNode> nodeMap,
+                                                   Map<String, List<SequenceFlow>> incomingFlowMap,
+                                                   Map<String, List<SequenceFlow>> outgoingFlowMap) {
+        Set<String> commonAncestorIds = null;
+        for (SequenceFlow incomingFlow : incomingFlows) {
+            Set<String> ancestorIds = new java.util.LinkedHashSet<>();
+            collectParallelSplitAncestorIds(incomingFlow.getSourceRef(), nodeMap, incomingFlowMap, outgoingFlowMap,
+                    ancestorIds, new java.util.LinkedHashSet<>());
+            if (commonAncestorIds == null) {
+                commonAncestorIds = ancestorIds;
+            } else {
+                commonAncestorIds.retainAll(ancestorIds);
+            }
+            if (commonAncestorIds == null || commonAncestorIds.isEmpty()) {
+                return false;
+            }
+        }
+        return commonAncestorIds != null && !commonAncestorIds.isEmpty();
+    }
+
+    private void collectParallelSplitAncestorIds(String nodeId,
+                                                 Map<String, FlowNode> nodeMap,
+                                                 Map<String, List<SequenceFlow>> incomingFlowMap,
+                                                 Map<String, List<SequenceFlow>> outgoingFlowMap,
+                                                 Set<String> ancestorIds,
+                                                 Set<String> visitedNodeIds) {
+        if (!StringUtils.hasText(nodeId) || !visitedNodeIds.add(nodeId)) {
+            return;
+        }
+        FlowNode node = nodeMap.get(nodeId);
+        if (isParallelGatewayNode(node) && outgoingFlowMap.getOrDefault(nodeId, List.of()).size() > 1) {
+            ancestorIds.add(nodeId);
+        }
+        for (SequenceFlow incomingFlow : incomingFlowMap.getOrDefault(nodeId, List.of())) {
+            collectParallelSplitAncestorIds(incomingFlow.getSourceRef(), nodeMap, incomingFlowMap, outgoingFlowMap,
+                    ancestorIds, visitedNodeIds);
+        }
+    }
+
+    private boolean isUserTaskNode(FlowNode node) {
+        return node != null && USER_TASK.equals(node.getClass().getSimpleName());
+    }
+
+    private boolean isParallelGatewayNode(FlowNode node) {
+        return node != null && "ParallelGateway".equals(node.getClass().getSimpleName());
+    }
+
+    private String resolveFlowNodeName(FlowNode node) {
+        if (node == null) {
+            return "";
+        }
+        return StringUtils.hasText(node.getName()) ? node.getName() : node.getId();
     }
 
     private void validateProcessDefinitionUnique(BpmnModel bpmnModel) {
@@ -380,6 +625,40 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
         if (existingProcessDefinition != null) {
             throw new IllegalArgumentException("流程定义标识已存在，请修改 BPMN 中的 process id 后重新部署，process id：" + processDefinitionKey);
         }
+    }
+
+    private void validateUpdateProcessDefinitionKey(BpmnModel bpmnModel, ProcessDefinition oldProcessDefinition) {
+        Process mainProcess = bpmnModel.getMainProcess();
+        String newProcessDefinitionKey = mainProcess.getId().trim();
+        if (!Objects.equals(newProcessDefinitionKey, oldProcessDefinition.getKey())) {
+            throw new IllegalArgumentException("流程定义标识必须与原流程一致，当前process id："
+                    + newProcessDefinitionKey + "，原process id：" + oldProcessDefinition.getKey());
+        }
+    }
+
+    private void copyProcessClientBindings(String oldProcessDefinitionId, ProcessDefinition newProcessDefinition) {
+        if (!StringUtils.hasText(oldProcessDefinitionId) || newProcessDefinition == null) {
+            return;
+        }
+        List<WcdkProcessClientProcess> oldBindings = wcdkProcessClientProcessMapper.selectList(new LambdaQueryWrapper<WcdkProcessClientProcess>()
+                .eq(WcdkProcessClientProcess::getProcessDefinitionId, oldProcessDefinitionId));
+        if (oldBindings.isEmpty()) {
+            return;
+        }
+        wcdkProcessClientProcessMapper.delete(new LambdaQueryWrapper<WcdkProcessClientProcess>()
+                .eq(WcdkProcessClientProcess::getProcessDefinitionId, newProcessDefinition.getId()));
+        LocalDateTime now = LocalDateTime.now();
+        oldBindings.stream()
+                .filter(binding -> StringUtils.hasText(binding.getClientId()))
+                .filter(binding -> StringUtils.hasText(binding.getProcessBeanName()))
+                .forEach(binding -> wcdkProcessClientProcessMapper.insert(WcdkProcessClientProcess.builder()
+                        .clientId(binding.getClientId().trim())
+                        .processBeanName(binding.getProcessBeanName().trim())
+                        .processDefinitionId(newProcessDefinition.getId())
+                        .processName(StringUtils.hasText(newProcessDefinition.getName()) ? newProcessDefinition.getName() : binding.getProcessName())
+                        .excuteParam(binding.getExcuteParam())
+                        .createTime(now)
+                        .build()));
     }
 
     private String resolveDeploymentResourceName(String originalFilename) {
@@ -407,6 +686,7 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
                 .fileName(resolveDeploymentFileName(deployment.getId()))
                 .category(deployment.getCategory())
                 .deployTime(deployment.getDeploymentTime())
+                .invalidStatus(0)
                 .clientIds(List.of())
                 .clientNames(List.of())
                 .processBeanNames(List.of())
@@ -416,11 +696,13 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
     private DeploymentResponse buildDeploymentResponse(Deployment deployment,
                                                        List<ProcessDefinition> processDefinitions,
                                                        Map<String, List<WcdkProcessClientProcess>> bindingMap,
-                                                       Map<String, String> clientNameMap) {
+                                                       Map<String, String> clientNameMap,
+                                                       Map<String, Integer> invalidStatusMap) {
         List<WcdkProcessClientProcess> bindings = (processDefinitions == null ? List.<ProcessDefinition>of() : processDefinitions)
                 .stream()
                 .flatMap(processDefinition -> bindingMap.getOrDefault(processDefinition.getId(), List.of()).stream())
                 .toList();
+        Integer invalidStatus = resolveDeploymentInvalidStatus(processDefinitions, invalidStatusMap);
         List<String> clientIds = bindings.stream()
                 .map(WcdkProcessClientProcess::getClientId)
                 .filter(StringUtils::hasText)
@@ -440,6 +722,7 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
                 .fileName(resolveDeploymentFileName(deployment.getId()))
                 .category(deployment.getCategory())
                 .deployTime(deployment.getDeploymentTime())
+                .invalidStatus(invalidStatus)
                 .clientIds(clientIds)
                 .clientNames(clientNames)
                 .processBeanNames(processBeanNames)
@@ -466,7 +749,8 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
     private ProcessDefinitionResponse buildProcessDefinitionResponse(ProcessDefinition processDefinition,
                                                                      String category,
                                                                      List<WcdkProcessClientProcess> bindings,
-                                                                     Map<String, String> clientNameMap) {
+                                                                     Map<String, String> clientNameMap,
+                                                                     Integer invalidStatus) {
         List<WcdkProcessClientProcess> bindingRows = bindings == null ? List.of() : bindings;
         List<String> clientIds = bindingRows.stream()
                 .map(WcdkProcessClientProcess::getClientId)
@@ -490,6 +774,7 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
                 .deploymentId(processDefinition.getDeploymentId())
                 .resourceName(processDefinition.getResourceName())
                 .suspended(processDefinition.isSuspended())
+                .invalidStatus(invalidStatus == null ? 0 : invalidStatus)
                 .clientIds(clientIds)
                 .clientNames(clientNames)
                 .processBeanNames(processBeanNames)
@@ -511,6 +796,97 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
                         .in(WcdkProcessClientProcess::getProcessDefinitionId, processDefinitionIds))
                 .stream()
                 .collect(Collectors.groupingBy(WcdkProcessClientProcess::getProcessDefinitionId));
+    }
+
+    private Map<String, Integer> listInvalidStatusMap(List<ProcessDefinition> processDefinitions) {
+        if (processDefinitions == null || processDefinitions.isEmpty()) {
+            return Map.of();
+        }
+        List<String> processDefinitionIds = processDefinitions.stream()
+                .map(ProcessDefinition::getId)
+                .filter(StringUtils::hasText)
+                .toList();
+        if (processDefinitionIds.isEmpty()) {
+            return Map.of();
+        }
+        return wcdkProcessDefinitionMetaMapper.selectList(new LambdaQueryWrapper<WcdkProcessDefinitionMeta>()
+                        .in(WcdkProcessDefinitionMeta::getProcessDefinitionId, processDefinitionIds))
+                .stream()
+                .filter(meta -> StringUtils.hasText(meta.getProcessDefinitionId()))
+                .collect(Collectors.toMap(
+                        WcdkProcessDefinitionMeta::getProcessDefinitionId,
+                        meta -> meta.getInvalidStatus() == null ? 0 : meta.getInvalidStatus(),
+                        (left, right) -> right
+                ));
+    }
+
+    private Integer resolveDeploymentInvalidStatus(List<ProcessDefinition> processDefinitions,
+                                                   Map<String, Integer> invalidStatusMap) {
+        List<ProcessDefinition> definitions = processDefinitions == null ? List.of() : processDefinitions;
+        if (definitions.isEmpty()) {
+            return 0;
+        }
+        boolean hasEffective = definitions.stream()
+                .anyMatch(processDefinition -> invalidStatusMap == null
+                        || invalidStatusMap.getOrDefault(processDefinition.getId(), 0) == 0);
+        return hasEffective ? 0 : 1;
+    }
+
+    private void initDeploymentDefinitionMeta(String deploymentId) {
+        if (!StringUtils.hasText(deploymentId)) {
+            return;
+        }
+        repositoryService.createProcessDefinitionQuery()
+                .deploymentId(deploymentId)
+                .list()
+                .forEach(processDefinition -> ensureProcessDefinitionMeta(processDefinition, 0));
+    }
+
+    private void ensureProcessDefinitionMeta(ProcessDefinition processDefinition, Integer invalidStatus) {
+        if (processDefinition == null || !StringUtils.hasText(processDefinition.getId())) {
+            return;
+        }
+        WcdkProcessDefinitionMeta meta = wcdkProcessDefinitionMetaMapper.selectOne(new LambdaQueryWrapper<WcdkProcessDefinitionMeta>()
+                .eq(WcdkProcessDefinitionMeta::getProcessDefinitionId, processDefinition.getId()));
+        LocalDateTime now = LocalDateTime.now();
+        if (meta == null) {
+            wcdkProcessDefinitionMetaMapper.insert(WcdkProcessDefinitionMeta.builder()
+                    .processDefinitionId(processDefinition.getId())
+                    .processDefinitionKey(processDefinition.getKey())
+                    .processDefinitionVersion(processDefinition.getVersion())
+                    .deploymentId(processDefinition.getDeploymentId())
+                    .invalidStatus(invalidStatus == null ? 0 : invalidStatus)
+                    .createTime(now)
+                    .updateTime(now)
+                    .build());
+            return;
+        }
+        meta.setProcessDefinitionKey(processDefinition.getKey());
+        meta.setProcessDefinitionVersion(processDefinition.getVersion());
+        meta.setDeploymentId(processDefinition.getDeploymentId());
+        meta.setInvalidStatus(invalidStatus == null ? 0 : invalidStatus);
+        meta.setUpdateTime(now);
+        wcdkProcessDefinitionMetaMapper.updateById(meta);
+    }
+
+    private void markProcessDefinitionInvalid(String processDefinitionId) {
+        if (!StringUtils.hasText(processDefinitionId)) {
+            return;
+        }
+        ProcessDefinition processDefinition = repositoryService.createProcessDefinitionQuery()
+                .processDefinitionId(processDefinitionId)
+                .singleResult();
+        if (processDefinition != null) {
+            ensureProcessDefinitionMeta(processDefinition, 1);
+            return;
+        }
+        WcdkProcessDefinitionMeta meta = wcdkProcessDefinitionMetaMapper.selectOne(new LambdaQueryWrapper<WcdkProcessDefinitionMeta>()
+                .eq(WcdkProcessDefinitionMeta::getProcessDefinitionId, processDefinitionId.trim()));
+        if (meta != null) {
+            meta.setInvalidStatus(1);
+            meta.setUpdateTime(LocalDateTime.now());
+            wcdkProcessDefinitionMetaMapper.updateById(meta);
+        }
     }
 
     private Map<String, String> listClientNameMap(Map<String, List<WcdkProcessClientProcess>> bindingMap) {
@@ -578,8 +954,8 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
              InputStreamReader reader = new InputStreamReader(inputStream, StandardCharsets.UTF_8)) {
             return FileCopyUtils.copyToString(reader);
         } catch (IOException ex) {
-            log.error("璇诲彇娴佺▼瀹氫箟 XML 澶辫触锛屾祦绋嬪畾涔塈D锛歿}", processDefinition.getId(), ex);
-            throw new IllegalArgumentException("璇诲彇娴佺▼瀹氫箟 XML 澶辫触");
+            log.error("读取流程定义 XML 失败，流程定义ID：{}", processDefinition.getId(), ex);
+            throw new IllegalArgumentException("读取流程定义 XML 失败");
         }
     }
 

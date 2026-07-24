@@ -35,6 +35,13 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleException(Exception ex) {
+        String message = ex.getMessage();
+        if(message.startsWith("未从注册中心找到服务实例")){
+            String substring = message.substring(message.indexOf("：") + 1);
+            log.error("客户端未存活{}", substring);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.fail(500, "客户端未存活:"+substring));
+        }
         log.error("系统处理异常", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.fail(500, "系统处理异常，请稍后重试"));

@@ -6,6 +6,7 @@ import com.wcdk.process.dto.DeploymentBindingUpdateRequest;
 import com.wcdk.process.dto.DeploymentResponse;
 import com.wcdk.process.dto.ProcessDefinitionDetailResponse;
 import com.wcdk.process.dto.ProcessDefinitionResponse;
+import com.wcdk.process.dto.ProcessDefinitionUpdateRequest;
 import com.wcdk.process.dto.WcdkProcessClientResponse;
 import com.wcdk.process.service.FlowableDeployService;
 import com.wcdk.process.service.WcdkProcessClientRegistryService;
@@ -88,6 +89,17 @@ public class FlowableDeployController {
     @Operation(summary = "查询流程定义详情", description = "根据流程定义编号查询流程定义详情与流程图结构")
     public ApiResponse<ProcessDefinitionDetailResponse> getProcessDefinitionDetail(@PathVariable String processDefinitionId) {
         return ApiResponse.success(flowableDeployService.getProcessDefinitionDetail(processDefinitionId));
+    }
+
+    @PutMapping("/definition/{processDefinitionId}")
+    @Operation(summary = "修改流程定义", description = "根据流程定义编号修改 BPMN 内容并生成新版本流程定义")
+    public ApiResponse<ProcessDefinitionDetailResponse> updateProcessDefinition(@PathVariable String processDefinitionId,
+                                                                                @RequestBody ProcessDefinitionUpdateRequest request) {
+        if (request == null) {
+            request = new ProcessDefinitionUpdateRequest();
+        }
+        request.setProcessDefinitionId(processDefinitionId);
+        return ApiResponse.success("流程修改成功", flowableDeployService.updateProcessDefinition(request));
     }
 
     @PutMapping("/{deploymentId}/binding")

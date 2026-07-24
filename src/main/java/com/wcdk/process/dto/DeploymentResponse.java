@@ -25,6 +25,8 @@ public class DeploymentResponse {
 
     private Date deployTime;
 
+    private Integer invalidStatus;
+
     private List<String> clientIds;
 
     private List<String> clientNames;

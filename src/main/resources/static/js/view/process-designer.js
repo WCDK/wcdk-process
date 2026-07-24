@@ -15,6 +15,7 @@ window.ProcessDesigner = {
                         <h2>流程设计</h2>
                     </div>
                     <div class="designer-header-actions">
+                        <el-button v-if="canShowDesignerSave && hasButton('designer:save')" type="primary" :loading="designerSaveLoading" @click="handleSaveDesignerModel">{{ designerSaveButtonText }}</el-button>
                         <el-button v-if="hasButton('designer:export:bpmn')" @click="handleExportBpmn">导出 BPMN</el-button>
                         <el-button v-if="hasButton('designer:export:bpmn-xml')" @click="handleExportBpmnXml">导出 BPMN.XML</el-button>
                         <el-button v-if="hasButton('designer:export:png')" @click="handleExportPng">导出 PNG</el-button>
@@ -166,6 +167,22 @@ window.ProcessDesigner = {
                                             marker-end="url(#designer-arrowhead)"
                                             @click.stop="handleEdgeSelect(edge.id)">
                                         </path>
+                                        <g
+                                            v-for="edge in visibleNamedCanvasEdges"
+                                            :key="'edge-label-' + edge.id"
+                                            class="designer-stage-line-label"
+                                            :class="{ active: selectedEdgeId === edge.id }"
+                                            :transform="'translate(' + resolveEdgeLabelPoint(edge).x + ',' + resolveEdgeLabelPoint(edge).y + ')'"
+                                            @click.stop="handleEdgeSelect(edge.id)">
+                                            <rect
+                                                :x="-resolveEdgeLabelSize(edge).width / 2"
+                                                y="-12"
+                                                :width="resolveEdgeLabelSize(edge).width"
+                                                height="24"
+                                                rx="12">
+                                            </rect>
+                                            <text text-anchor="middle" dominant-baseline="central">{{ resolveEdgeLabelText(edge) }}</text>
+                                        </g>
                                         <path
                                             v-if="connectPreviewPath"
                                             class="designer-stage-line designer-stage-line-preview"
@@ -228,6 +245,12 @@ window.ProcessDesigner = {
                                         </div>
                                         <div class="designer-stage-node-name">{{ node.name }}</div>
                                         <div class="designer-stage-node-type">{{ node.label }}</div>
+                                        <div
+                                            v-if="hasBoundForms(node)"
+                                            class="designer-stage-node-bind"
+                                            :title="resolveNodeBoundFormTitle(node)">
+                                            已绑 {{ resolveNodeBoundFormCount(node) }} 个表单
+                                        </div>
                                     </div>
 
                                     <div
@@ -268,6 +291,12 @@ window.ProcessDesigner = {
                                         </div>
                                         <div class="designer-stage-node-name">{{ node.name }}</div>
                                         <div class="designer-stage-node-type">{{ node.label }}</div>
+                                        <div
+                                            v-if="hasBoundForms(node)"
+                                            class="designer-stage-node-bind"
+                                            :title="resolveNodeBoundFormTitle(node)">
+                                            已绑 {{ resolveNodeBoundFormCount(node) }} 个表单
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -315,7 +344,7 @@ window.ProcessDesigner = {
                             <div class="designer-summary-title">操作提示</div>
                             <div class="designer-summary-list">
                                 <span>拖拽左侧节点到画布。</span>
-                                <span>双击节点开始或完成连线。</span>
+                                <span>拖拽节点右侧连接点开始连线。</span>
                                 <span>点击右侧面板可直接编辑名称、标识和说明。</span>
                             </div>
                         </div>
@@ -369,6 +398,22 @@ window.ProcessDesigner = {
                                         <el-input v-model.trim="selectedNode.properties.formKey" placeholder="请输入表单标识或前端表单地址"></el-input>
                                     </el-form-item>
                                     <template v-if="isUserTaskNode(selectedNode)">
+                                        <el-form-item label="绑定表单">
+                                            <div class="designer-form-bind-row">
+                                                <el-button type="primary" size="mini" @click="openUserTaskFormDialog">绑定表单</el-button>
+                                                <span class="helper-text" v-if="!selectedNode.properties.boundFormKeys.length">未绑定表单</span>
+                                            </div>
+                                            <div class="designer-bound-form-tags" v-if="selectedNode.properties.boundFormKeys.length">
+                                                <el-tag
+                                                    v-for="formKey in selectedNode.properties.boundFormKeys"
+                                                    :key="formKey"
+                                                    size="mini"
+                                                    closable
+                                                    @close="removeBoundFormKey(formKey)">
+                                                    {{ resolveBoundFormName(formKey) }}
+                                                </el-tag>
+                                            </div>
+                                        </el-form-item>
                                         <el-form-item label="办理人">
                                             <el-input v-model.trim="selectedNode.properties.assignee" placeholder="请输入办理人表达式，例如 \${assignee}"></el-input>
                                         </el-form-item>
@@ -617,6 +662,101 @@ window.ProcessDesigner = {
                         </template>
                     </aside>
                 </div>
+
+                <el-dialog
+                    title="绑定表单"
+                    :visible.sync="formBindDialogVisible"
+                    width="760px"
+                    append-to-body
+                    @open="handleFormBindDialogOpen">
+                    <div class="designer-form-bind-dialog">
+                        <div class="designer-form-bind-filter">
+                            <el-input
+                                v-model.trim="formBindQuery.formName"
+                                size="small"
+                                clearable
+                                placeholder="表单名称"
+                                @keyup.enter.native="handleFormBindQuery">
+                            </el-input>
+                            <el-input
+                                v-model.trim="formBindQuery.formKey"
+                                size="small"
+                                clearable
+                                placeholder="表单标识"
+                                @keyup.enter.native="handleFormBindQuery">
+                            </el-input>
+                            <el-button size="small" type="primary" @click="handleFormBindQuery">查询</el-button>
+                            <el-button size="small" @click="resetFormBindQuery">重置</el-button>
+                        </div>
+                        <el-table
+                            ref="formBindTable"
+                            v-loading="formBindLoading"
+                            :data="formBindRecords"
+                            row-key="formKey"
+                            height="360"
+                            @selection-change="handleFormBindSelectionChange">
+                            <el-table-column type="selection" width="48" :reserve-selection="true"></el-table-column>
+                            <el-table-column prop="formName" label="表单名称" min-width="160"></el-table-column>
+                            <el-table-column prop="formKey" label="表单标识" min-width="180"></el-table-column>
+                            <el-table-column prop="formVersion" label="版本" width="80"></el-table-column>
+                            <el-table-column prop="updateTime" label="更新时间" min-width="160">
+                                <template slot-scope="scope">{{ formatDateTime(scope.row.updateTime) }}</template>
+                            </el-table-column>
+                            <el-table-column label="操作" width="90" fixed="right">
+                                <template slot-scope="scope">
+                                    <el-button type="text" @click.stop="previewFormBindRecord(scope.row)">预览</el-button>
+                                </template>
+                            </el-table-column>
+                        </el-table>
+                        <div class="designer-form-bind-footer">
+                            <el-pagination
+                                background
+                                layout="total, prev, pager, next"
+                                :current-page="formBindPageNum"
+                                :page-size="formBindPageSize"
+                                :total="formBindTotal"
+                                @current-change="handleFormBindPageChange">
+                            </el-pagination>
+                            <span class="helper-text">已选择 {{ formBindSelectedKeys.length }} 个表单</span>
+                        </div>
+                    </div>
+                    <span slot="footer" class="dialog-footer">
+                        <el-button @click="formBindDialogVisible = false">取消</el-button>
+                        <el-button type="primary" @click="confirmUserTaskFormBinding">确定</el-button>
+                    </span>
+                </el-dialog>
+
+                <el-dialog
+                    title="表单预览"
+                    :visible.sync="formPreviewDialogVisible"
+                    width="760px"
+                    append-to-body>
+                    <div v-if="previewFormRecord">
+                        <div class="process-schema-panel">
+                            <div class="schema-chip-list">
+                                <span class="schema-chip">{{ previewFormRecord.formName || previewFormRecord.formKey }}</span>
+                                <span class="schema-chip">{{ previewFormRecord.formKey }}</span>
+                                <span class="schema-chip">字段数量：{{ previewFormFieldCount }}</span>
+                            </div>
+                        </div>
+                        <el-form label-position="top" class="panel-form" @submit.native.prevent>
+                            <div v-if="previewFormFields.length" class="form-grid two-columns dynamic-process-form-grid">
+                                <dynamic-process-form-field
+                                    v-for="field in previewFormFields"
+                                    :key="field.fieldKey"
+                                    :field="field"
+                                    :form-values="previewFormValues">
+                                </dynamic-process-form-field>
+                            </div>
+                            <div class="empty-panel process-schema-empty" v-else>
+                                当前表单没有可预览字段。
+                            </div>
+                        </el-form>
+                    </div>
+                    <span slot="footer" class="dialog-footer">
+                        <el-button @click="formPreviewDialogVisible = false">关闭</el-button>
+                    </span>
+                </el-dialog>
             </section>
         </section>
     `,
@@ -789,7 +929,7 @@ window.ProcessDesigner = {
                         {
                             type: "inclusiveGateway",
                             bpmnType: "inclusiveGateway",
-                            label: "包容网关",
+                            label: "聚合网关",
                             shortLabel: "包容",
                             description: "根据条件选择一个或多个分支。",
                             kind: "gateway",
@@ -905,8 +1045,32 @@ window.ProcessDesigner = {
             canvasHeight: 1400,
             leftPanelCollapsed: false,
             rightPanelCollapsed: false,
+            designerSaveLoading: false,
+            draftDesignerModelKey: "",
+            importedModelId: "",
+            importedProcessDefinitionKey: "",
+            importedProcessDefinitionName: "",
+            importedProcessDefinitionCategory: "",
             importedProcessDefinitionId: "",
-            importedDeploymentId: ""
+            importedDeploymentId: "",
+            formBindDialogVisible: false,
+            formBindLoading: false,
+            formBindRecords: [],
+            formBindSelectedKeys: [],
+            formBindSelectedMap: {},
+            formBindSyncingSelection: false,
+            formBindQuery: {
+                formName: "",
+                formKey: ""
+            },
+            formBindPageNum: 1,
+            formBindPageSize: 10,
+            formBindTotal: 0,
+            formPreviewDialogVisible: false,
+            previewFormRecord: null,
+            previewFormFields: [],
+            previewFormValues: {},
+            previewFormFieldCount: 0
         };
     },
     computed: {
@@ -926,6 +1090,16 @@ window.ProcessDesigner = {
                 }
             }
             return null;
+        },
+        canShowDesignerSave: function () {
+            return true;
+        },
+        isUpdateProcessMode: function () {
+            var query = this.$route && this.$route.query ? this.$route.query : {};
+            return query.flg === "update";
+        },
+        designerSaveButtonText: function () {
+            return this.importedModelId || this.importedProcessDefinitionId ? "保存修改" : "新增流程";
         },
         pendingSourceNode: function () {
             if (!this.pendingSourceId) {
@@ -962,6 +1136,11 @@ window.ProcessDesigner = {
                 }
             }
             return edges;
+        },
+        visibleNamedCanvasEdges: function () {
+            return this.visibleCanvasEdges.filter(function (edge) {
+                return !!String(edge && edge.name || "").trim();
+            });
         },
         connectPreviewPath: function () {
             if (!this.connectDragState.active || !this.connectDragState.sourceId) {
@@ -1057,17 +1236,229 @@ window.ProcessDesigner = {
             return "流程概览";
         }
     },
-    methods: {
+        methods: {
+        formatDateTime: window.AppService.formatDateTime,
         hasButton: function (permissionCode) {
             if (this.$root && typeof this.$root.hasButton === "function") {
                 return this.$root.hasButton(permissionCode);
             }
             return window.AppService.hasResource(permissionCode, "BUTTON");
         },
+        cloneDesignerData: function (data) {
+            return JSON.parse(JSON.stringify(data || []));
+        },
+        resolveDesignerModelKey: function () {
+            return this.importedProcessDefinitionKey
+                || (this.importedProcessDefinitionId ? String(this.importedProcessDefinitionId).split(":")[0] : "")
+                || this.ensureDraftDesignerModelKey();
+        },
+        ensureDraftDesignerModelKey: function () {
+            if (!this.draftDesignerModelKey) {
+                this.draftDesignerModelKey = "Wcdk_" + Date.now();
+            }
+            return this.draftDesignerModelKey;
+        },
+        resolveDesignerModelName: function () {
+            return this.importedProcessDefinitionName
+                || this.resolveDesignerModelKey();
+        },
+        handleSaveDesignerModel: async function () {
+            this.designerSaveLoading = true;
+            try {
+                var modelResult = this.isUpdateProcessMode && this.importedProcessDefinitionId
+                    ? await this.saveDesignerProcessDefinition()
+                    : await this.saveDesignerFlowModel();
+                if (this.importedProcessDefinitionId) {
+                    await this.saveDesignerFormBinding();
+                }
+                this.$message.success((modelResult && modelResult.message) || "流程保存成功");
+            } catch (error) {
+                this.$message.error(error && error.message ? error.message : "流程保存失败");
+            } finally {
+                this.designerSaveLoading = false;
+            }
+        },
+        saveDesignerFlowModel: async function () {
+            var payload = await this.buildDesignerModelSavePayload();
+            var result = null;
+            if (this.importedModelId) {
+                result = await window.AppService.requestJson("/flowable/model/" + encodeURIComponent(this.importedModelId), {
+                    method: "PUT",
+                    body: JSON.stringify({
+                        modelName: payload.modelName,
+                        category: payload.category,
+                        bpmnXml: payload.bpmnXml
+                    })
+                });
+            } else {
+                result = await window.AppService.requestJson("/flowable/model", {
+                    method: "POST",
+                    body: JSON.stringify(payload)
+                });
+            }
+            var model = result && result.data ? result.data : null;
+            if (model && model.modelId) {
+                this.importedModelId = model.modelId;
+                this.importedProcessDefinitionKey = model.modelKey || this.importedProcessDefinitionKey;
+                this.importedProcessDefinitionName = model.modelName || this.importedProcessDefinitionName;
+                this.importedProcessDefinitionCategory = model.category || this.importedProcessDefinitionCategory;
+                this.draftDesignerModelKey = "";
+                this.syncRouteModelId(model.modelId);
+            }
+            if (this.$root && typeof this.$root.loadModels === "function") {
+                await this.$root.loadModels();
+            }
+            return result;
+        },
+        saveDesignerProcessDefinition: async function () {
+            if (!this.importedProcessDefinitionId) {
+                throw new Error("未查询到要修改的流程定义");
+            }
+            var payload = await this.buildDesignerModelSavePayload();
+            var result = await window.AppService.requestJson("/flowable/deploy/definition/" + encodeURIComponent(this.importedProcessDefinitionId), {
+                method: "PUT",
+                body: JSON.stringify({
+                    deploymentId: this.importedDeploymentId || "",
+                    processDefinitionId: this.importedProcessDefinitionId,
+                    bpmnXml: payload.bpmnXml
+                })
+            });
+            var detail = result && result.data ? result.data : null;
+            if (detail && detail.processDefinitionId) {
+                this.importedProcessDefinitionId = detail.processDefinitionId;
+                this.importedDeploymentId = detail.deploymentId || this.importedDeploymentId;
+                this.importedProcessDefinitionKey = detail.processDefinitionKey || this.importedProcessDefinitionKey;
+                this.importedProcessDefinitionName = detail.processDefinitionName || this.importedProcessDefinitionName;
+                this.importedProcessDefinitionCategory = detail.category || this.importedProcessDefinitionCategory;
+                this.importedModelId = "";
+                this.syncRouteProcessDefinition(detail);
+            }
+            var reloadTasks = [];
+            if (this.$root && typeof this.$root.loadDeployments === "function") {
+                reloadTasks.push(this.$root.loadDeployments());
+            }
+            if (this.$root && typeof this.$root.loadDefinitions === "function") {
+                reloadTasks.push(this.$root.loadDefinitions());
+            }
+            if (reloadTasks.length) {
+                await Promise.all(reloadTasks);
+            }
+            return result;
+        },
+        buildDesignerModelSavePayload: async function () {
+            var exportData = await this.requestProcessDesignerExport("bpmn20.xml");
+            if (!exportData || !exportData.contentBase64) {
+                throw new Error("流程模型生成失败");
+            }
+            var modelKey = this.resolveDesignerModelKey();
+            return {
+                modelName: this.resolveDesignerModelName(),
+                modelKey: modelKey,
+                category: this.importedProcessDefinitionCategory || "",
+                bpmnXml: this.decodeBase64ToText(exportData.contentBase64)
+            };
+        },
+        saveDesignerFormBinding: async function () {
+            var payload = this.buildDesignerFormBindingPayload();
+            if (!payload.processDefinitionId) {
+                return null;
+            }
+            return window.AppService.requestJson("/process/form/binding", {
+                method: "POST",
+                body: JSON.stringify(payload)
+            });
+        },
+        loadProcessFormBindings: async function (processDefinitionId) {
+            if (!processDefinitionId) {
+                return;
+            }
+            var result = await window.AppService.request("/process/form/binding/" + encodeURIComponent(processDefinitionId));
+            this.applyProcessFormBindings(result.data || []);
+        },
+        applyProcessFormBindings: function (records) {
+            var bindingMap = {};
+            for (var index = 0; index < (records || []).length; index += 1) {
+                var record = records[index] || {};
+                var nodeId = String(record.processNodeId || record.processNode || "").trim();
+                if (!nodeId || !record.formKey) {
+                    continue;
+                }
+                if (!bindingMap[nodeId]) {
+                    bindingMap[nodeId] = [];
+                }
+                bindingMap[nodeId].push(record);
+            }
+            for (var nodeIndex = 0; nodeIndex < this.canvasNodes.length; nodeIndex += 1) {
+                var node = this.canvasNodes[nodeIndex];
+                if (!this.isUserTaskNode(node)) {
+                    continue;
+                }
+                var forms = this.normalizeBoundForms(bindingMap[node.code] || bindingMap[node.id] || []);
+                var properties = this.ensureNodeProperties(node);
+                this.$set(properties, "boundForms", forms);
+                this.$set(properties, "boundFormKeys", forms.map(function (form) {
+                    return form.formKey;
+                }));
+                this.syncUserTaskFormKey(node);
+            }
+        },
+        syncRouteModelId: function (modelId) {
+            if (!this.$router || !this.$route || !modelId) {
+                return;
+            }
+            var query = Object.assign({}, this.$route.query || {}, {modelId: modelId});
+            this.$router.replace({path: this.$route.path, query: query}).catch(function () {});
+        },
+        syncRouteProcessDefinition: function (detail) {
+            if (!this.$router || !this.$route || !detail || !detail.processDefinitionId) {
+                return;
+            }
+            var query = Object.assign({}, this.$route.query || {}, {
+                flg: "update",
+                deploymentId: detail.deploymentId || this.importedDeploymentId || "",
+                processDefinitionId: detail.processDefinitionId
+            });
+            delete query.modelId;
+            this.$router.replace({path: this.$route.path, query: query}).catch(function () {});
+        },
+        buildDesignerFormBindingPayload: function () {
+            var bindings = [];
+            for (var index = 0; index < this.canvasNodes.length; index += 1) {
+                var node = this.canvasNodes[index];
+                if (!this.isUserTaskNode(node)) {
+                    continue;
+                }
+                var properties = this.ensureNodeProperties(node);
+                var boundForms = this.normalizeBoundForms(properties.boundForms || []);
+                var formIds = [];
+                for (var formIndex = 0; formIndex < boundForms.length; formIndex += 1) {
+                    var formId = String(boundForms[formIndex].id || "").trim();
+                    if (formId && formIds.indexOf(formId) < 0) {
+                        formIds.push(formId);
+                    }
+                }
+                if (!formIds.length) {
+                    continue;
+                }
+                bindings.push({
+                    taskDefinitionKey: node.code || node.id,
+                    formIds: formIds
+                });
+            }
+            return {
+                processDefinitionId: this.importedProcessDefinitionId,
+                processDefinitionKey: this.importedProcessDefinitionKey,
+                processDefinitionVersion: "",
+                deploymentId: this.importedDeploymentId,
+                bindings: bindings
+            };
+        },
         buildDefaultNodeProperties: function (bpmnType) {
             return {
                 initiator: "",
                 formKey: "",
+                boundFormKeys: [],
+                boundForms: [],
                 assignee: "",
                 candidateUsers: "",
                 candidateGroups: "",
@@ -1120,6 +1511,12 @@ window.ProcessDesigner = {
                 if (Object.prototype.hasOwnProperty.call(defaults, key) && typeof node.properties[key] === "undefined") {
                     this.$set(node.properties, key, defaults[key]);
                 }
+            }
+            if (!Array.isArray(node.properties.boundFormKeys)) {
+                this.$set(node.properties, "boundFormKeys", this.parseFormKeyList(node.properties.boundFormKeys || node.properties.formKey));
+            }
+            if (!Array.isArray(node.properties.boundForms)) {
+                this.$set(node.properties, "boundForms", []);
             }
             return node.properties;
         },
@@ -1188,6 +1585,309 @@ window.ProcessDesigner = {
         supportsFormKey: function (node) {
             return this.isStartEventNode(node) || this.isUserTaskNode(node);
         },
+        parseFormKeyList: function (value) {
+            if (Array.isArray(value)) {
+                return value.filter(function (item) {
+                    return !!item;
+                }).map(function (item) {
+                    return String(item).trim();
+                }).filter(function (item, index, array) {
+                    return !!item && array.indexOf(item) === index;
+                });
+            }
+            return String(value || "").split(",").map(function (item) {
+                return item.trim();
+            }).filter(function (item, index, array) {
+                return !!item && array.indexOf(item) === index;
+            });
+        },
+        normalizeBoundForms: function (records) {
+            var results = [];
+            var usedKeys = {};
+            for (var index = 0; index < (records || []).length; index += 1) {
+                var record = records[index] || {};
+                var formKey = String(record.formKey || "").trim();
+                if (!formKey || usedKeys[formKey]) {
+                    continue;
+                }
+                usedKeys[formKey] = true;
+                results.push({
+                    id: record.id || "",
+                    formKey: formKey,
+                    formName: record.formName || formKey,
+                    formVersion: record.formVersion || ""
+                });
+            }
+            return results;
+        },
+        syncUserTaskFormKey: function (node) {
+            var targetNode = node || this.selectedNode;
+            if (!targetNode || !targetNode.properties) {
+                return;
+            }
+            var keys = this.parseFormKeyList(targetNode.properties.boundFormKeys);
+            this.$set(targetNode.properties, "boundFormKeys", keys);
+            this.$set(targetNode.properties, "formKey", keys.join(","));
+        },
+        openUserTaskFormDialog: function () {
+            if (!this.selectedNode || !this.isUserTaskNode(this.selectedNode)) {
+                return;
+            }
+            var properties = this.ensureNodeProperties(this.selectedNode);
+            this.formBindSelectedKeys = this.parseFormKeyList(properties.boundFormKeys || properties.formKey);
+            this.formBindSelectedMap = {};
+            for (var index = 0; index < (properties.boundForms || []).length; index += 1) {
+                var item = properties.boundForms[index] || {};
+                if (item.formKey) {
+                    this.$set(this.formBindSelectedMap, item.formKey, item);
+                }
+            }
+            for (var keyIndex = 0; keyIndex < this.formBindSelectedKeys.length; keyIndex += 1) {
+                var formKey = this.formBindSelectedKeys[keyIndex];
+                if (!this.formBindSelectedMap[formKey]) {
+                    this.$set(this.formBindSelectedMap, formKey, { formKey: formKey, formName: formKey });
+                }
+            }
+            this.formBindDialogVisible = true;
+        },
+        handleFormBindDialogOpen: function () {
+            this.loadFormBindRecords();
+        },
+        buildFormBindQuery: function () {
+            var query = "?pageNum=" + encodeURIComponent(this.formBindPageNum)
+                + "&pageSize=" + encodeURIComponent(this.formBindPageSize);
+            if (this.formBindQuery.formName) {
+                query += "&formName=" + encodeURIComponent(this.formBindQuery.formName);
+            }
+            if (this.formBindQuery.formKey) {
+                query += "&formKey=" + encodeURIComponent(this.formBindQuery.formKey);
+            }
+            return query;
+        },
+        loadFormBindRecords: async function () {
+            this.formBindLoading = true;
+            try {
+                var result = await window.AppService.request("/process/form/list" + this.buildFormBindQuery());
+                var pageData = result.data || {};
+                this.formBindRecords = pageData.records || [];
+                this.formBindTotal = Number(pageData.total || 0);
+                this.$nextTick(this.syncFormBindTableSelection);
+            } catch (error) {
+                this.$message.error(error && error.message ? error.message : "加载表单列表失败");
+            } finally {
+                this.formBindLoading = false;
+            }
+        },
+        syncFormBindTableSelection: function () {
+            var table = this.$refs.formBindTable;
+            if (!table || typeof table.clearSelection !== "function") {
+                return;
+            }
+            this.formBindSyncingSelection = true;
+            table.clearSelection();
+            for (var index = 0; index < this.formBindRecords.length; index += 1) {
+                var record = this.formBindRecords[index];
+                if (record && this.formBindSelectedKeys.indexOf(record.formKey) >= 0) {
+                    table.toggleRowSelection(record, true);
+                }
+            }
+            this.$nextTick(function () {
+                this.formBindSyncingSelection = false;
+            });
+        },
+        handleFormBindSelectionChange: function (selection) {
+            if (this.formBindSyncingSelection) {
+                return;
+            }
+            var currentPageKeys = this.formBindRecords.map(function (item) {
+                return item.formKey;
+            });
+            var selectedMap = {};
+            for (var selectedIndex = 0; selectedIndex < selection.length; selectedIndex += 1) {
+                var selected = selection[selectedIndex] || {};
+                if (selected.formKey) {
+                    selectedMap[selected.formKey] = selected;
+                    this.$set(this.formBindSelectedMap, selected.formKey, selected);
+                }
+            }
+            for (var keyIndex = this.formBindSelectedKeys.length - 1; keyIndex >= 0; keyIndex -= 1) {
+                var existingKey = this.formBindSelectedKeys[keyIndex];
+                if (currentPageKeys.indexOf(existingKey) >= 0 && !selectedMap[existingKey]) {
+                    this.formBindSelectedKeys.splice(keyIndex, 1);
+                    this.$delete(this.formBindSelectedMap, existingKey);
+                }
+            }
+            for (var addIndex = 0; addIndex < selection.length; addIndex += 1) {
+                var formKey = selection[addIndex] && selection[addIndex].formKey;
+                if (formKey && this.formBindSelectedKeys.indexOf(formKey) < 0) {
+                    this.formBindSelectedKeys.push(formKey);
+                }
+            }
+        },
+        handleFormBindQuery: function () {
+            this.formBindPageNum = 1;
+            this.loadFormBindRecords();
+        },
+        resetFormBindQuery: function () {
+            this.formBindQuery.formName = "";
+            this.formBindQuery.formKey = "";
+            this.formBindPageNum = 1;
+            this.loadFormBindRecords();
+        },
+        handleFormBindPageChange: function (pageNum) {
+            this.formBindPageNum = pageNum;
+            this.loadFormBindRecords();
+        },
+        previewFormBindRecord: function (record) {
+            if (!record) {
+                return;
+            }
+            var schema = Array.isArray(record.schema) ? this.cloneDesignerData(record.schema) : [];
+            this.previewFormRecord = record;
+            this.previewFormFields = this.makePreviewReadonlyFields(schema);
+            this.previewFormValues = this.buildPreviewFormValues(this.previewFormFields);
+            this.previewFormFieldCount = this.flattenPreviewFields(this.previewFormFields).length;
+            this.formPreviewDialogVisible = true;
+        },
+        makePreviewReadonlyFields: function (fields) {
+            var self = this;
+            return (fields || []).map(function (field) {
+                var nextField = Object.assign({}, field || {});
+                nextField.readOnly = true;
+                if (Array.isArray(nextField.children)) {
+                    if (nextField.componentType === "table" || nextField.type === "table") {
+                        nextField.children = nextField.children.map(function (cell) {
+                            var nextCell = Object.assign({}, cell || {});
+                            nextCell.fields = self.makePreviewReadonlyFields(nextCell.fields || []);
+                            return nextCell;
+                        });
+                    } else {
+                        nextField.children = self.makePreviewReadonlyFields(nextField.children || []);
+                    }
+                }
+                return nextField;
+            });
+        },
+        flattenPreviewFields: function (fields) {
+            var results = [];
+            for (var index = 0; index < (fields || []).length; index += 1) {
+                var field = fields[index];
+                if (!field) {
+                    continue;
+                }
+                if (field.componentType === "table" || field.type === "table") {
+                    var cells = field.children || [];
+                    for (var cellIndex = 0; cellIndex < cells.length; cellIndex += 1) {
+                        results = results.concat(this.flattenPreviewFields(cells[cellIndex].fields || []));
+                    }
+                    continue;
+                }
+                if (field.componentType === "group" || field.type === "group") {
+                    results = results.concat(this.flattenPreviewFields(field.children || []));
+                    continue;
+                }
+                if (field.componentType === "button" || field.type === "button" || !field.fieldKey) {
+                    continue;
+                }
+                results.push(field);
+            }
+            return results;
+        },
+        buildPreviewFormValues: function (fields) {
+            var values = {};
+            var flatFields = this.flattenPreviewFields(fields);
+            for (var index = 0; index < flatFields.length; index += 1) {
+                var field = flatFields[index];
+                if (field.componentType === "checkbox" || field.componentType === "switch") {
+                    values[field.fieldKey] = field.defaultValue === true || field.defaultValue === "true";
+                    continue;
+                }
+                if (field.componentType === "number") {
+                    values[field.fieldKey] = field.defaultValue !== null && field.defaultValue !== undefined && field.defaultValue !== ""
+                        ? Number(field.defaultValue)
+                        : null;
+                    continue;
+                }
+                values[field.fieldKey] = field.defaultValue !== null && field.defaultValue !== undefined
+                    ? field.defaultValue
+                    : "";
+            }
+            return values;
+        },
+        confirmUserTaskFormBinding: function () {
+            if (!this.selectedNode || !this.isUserTaskNode(this.selectedNode)) {
+                this.formBindDialogVisible = false;
+                return;
+            }
+            var boundForms = [];
+            for (var index = 0; index < this.formBindSelectedKeys.length; index += 1) {
+                var formKey = this.formBindSelectedKeys[index];
+                boundForms.push(this.formBindSelectedMap[formKey] || { formKey: formKey, formName: formKey });
+            }
+            var properties = this.ensureNodeProperties(this.selectedNode);
+            this.$set(properties, "boundFormKeys", this.parseFormKeyList(this.formBindSelectedKeys));
+            this.$set(properties, "boundForms", this.normalizeBoundForms(boundForms));
+            this.syncUserTaskFormKey(this.selectedNode);
+            this.formBindDialogVisible = false;
+        },
+        removeBoundFormKey: function (formKey) {
+            if (!this.selectedNode || !this.selectedNode.properties) {
+                return;
+            }
+            var keys = this.parseFormKeyList(this.selectedNode.properties.boundFormKeys);
+            var nextKeys = keys.filter(function (item) {
+                return item !== formKey;
+            });
+            var nextForms = this.normalizeBoundForms(this.selectedNode.properties.boundForms).filter(function (item) {
+                return item.formKey !== formKey;
+            });
+            this.$set(this.selectedNode.properties, "boundFormKeys", nextKeys);
+            this.$set(this.selectedNode.properties, "boundForms", nextForms);
+            this.syncUserTaskFormKey(this.selectedNode);
+        },
+        resolveBoundFormName: function (formKey) {
+            if (!this.selectedNode || !this.selectedNode.properties) {
+                return formKey;
+            }
+            var boundForms = this.selectedNode.properties.boundForms || [];
+            for (var index = 0; index < boundForms.length; index += 1) {
+                if (boundForms[index] && boundForms[index].formKey === formKey) {
+                    return (boundForms[index].formName || formKey) + "（" + formKey + "）";
+                }
+            }
+            return formKey;
+        },
+        hasBoundForms: function (node) {
+            return this.resolveNodeBoundFormCount(node) > 0;
+        },
+        resolveNodeBoundFormCount: function (node) {
+            if (!node || !this.isUserTaskNode(node)) {
+                return 0;
+            }
+            var properties = this.ensureNodeProperties(node);
+            return this.parseFormKeyList(properties.boundFormKeys || properties.formKey).length;
+        },
+        resolveNodeBoundFormTitle: function (node) {
+            if (!node || !this.isUserTaskNode(node)) {
+                return "";
+            }
+            var properties = this.ensureNodeProperties(node);
+            var boundForms = this.normalizeBoundForms(properties.boundForms || []);
+            var formKeys = this.parseFormKeyList(properties.boundFormKeys || properties.formKey);
+            var labels = [];
+            for (var index = 0; index < formKeys.length; index += 1) {
+                var formKey = formKeys[index];
+                var label = formKey;
+                for (var formIndex = 0; formIndex < boundForms.length; formIndex += 1) {
+                    if (boundForms[formIndex].formKey === formKey) {
+                        label = (boundForms[formIndex].formName || formKey) + "（" + formKey + "）";
+                        break;
+                    }
+                }
+                labels.push(label);
+            }
+            return labels.length ? "已绑定表单：" + labels.join("、") : "";
+        },
         supportsMultiInstance: function (node) {
             return this.isTaskNode(node) || this.isSubProcessNode(node);
         },
@@ -1254,6 +1954,11 @@ window.ProcessDesigner = {
                 ".designer-stage-line{fill:none;stroke:#7a93b8;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;cursor:pointer;pointer-events:auto;}",
                 ".designer-stage-line.active{stroke:#3477f6;}",
                 ".designer-stage-line-preview{stroke:#f59e0b;stroke-dasharray:8 6;pointer-events:none;}",
+                ".designer-stage-line-label{pointer-events:auto;cursor:pointer;}",
+                ".designer-stage-line-label rect{fill:rgba(255,255,255,0.94);stroke:#d8e3f4;filter:drop-shadow(0 4px 10px rgba(15,23,42,0.10));}",
+                ".designer-stage-line-label text{font-size:12px;font-weight:600;fill:#556b8b;user-select:none;}",
+                ".designer-stage-line-label.active rect{stroke:#3477f6;}",
+                ".designer-stage-line-label.active text{fill:#245fc9;}",
                 ".designer-stage-watermark{position:absolute;top:26px;right:28px;padding:14px 16px;border-radius:18px;border:1px solid rgba(207,220,237,0.88);background:rgba(255,255,255,0.86);backdrop-filter:blur(6px);display:grid;gap:4px;box-shadow:0 16px 30px rgba(31,45,61,0.08);pointer-events:none;}",
                 ".designer-stage-watermark span{font-size:11px;color:#7c8fa9;letter-spacing:1px;}",
                 ".designer-stage-watermark strong{font-size:14px;color:#20324c;}",
@@ -1285,6 +1990,7 @@ window.ProcessDesigner = {
                 ".designer-shape-artifact{width:58px;height:34px;border-radius:8px;border:2px dashed rgba(217,119,6,0.34);background:rgba(255,255,255,0.78);}",
                 ".designer-stage-node-name{max-width:100%;font-size:13px;font-weight:700;color:#1d2d46;text-align:center;line-height:1.4;word-break:break-word;}",
                 ".designer-stage-node-type{font-size:12px;color:#6d809d;text-align:center;}",
+                ".designer-stage-node-bind{position:absolute;left:50%;bottom:-15px;transform:translateX(-50%);max-width:calc(100% - 16px);height:22px;padding:0 9px;border-radius:999px;background:#ecfdf5;border:1px solid rgba(16,185,129,0.32);color:#047857;font-size:11px;font-weight:700;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 8px 16px rgba(16,185,129,0.14);}",
                 ".designer-summary-card{padding:14px 16px;border-radius:18px;border:1px solid #dfe8f6;background:rgba(255,255,255,0.88);display:grid;gap:12px;}",
                 ".designer-summary-title{font-size:14px;font-weight:700;color:#20324c;}",
                 ".designer-summary-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}",
@@ -1296,6 +2002,11 @@ window.ProcessDesigner = {
                 ".designer-form-block{display:grid;gap:10px;}",
                 ".designer-property-divider{margin:4px 0 8px;padding-top:10px;border-top:1px solid #e5edf7;color:#30445f;font-size:13px;font-weight:700;}",
                 ".designer-node-meta{display:flex;gap:8px;flex-wrap:wrap;}",
+                ".designer-form-bind-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}",
+                ".designer-bound-form-tags{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}",
+                ".designer-form-bind-dialog{display:grid;gap:12px;}",
+                ".designer-form-bind-filter{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto auto;gap:10px;align-items:center;}",
+                ".designer-form-bind-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;}",
                 ".designer-branch-config{display:grid;gap:8px;padding:10px;border:1px solid rgba(207,224,246,0.9);border-radius:8px;background:#f8fbff;}",
                 ".designer-branch-item{display:grid;gap:6px;}",
                 ".designer-branch-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;color:#31415f;}",
@@ -1422,6 +2133,8 @@ window.ProcessDesigner = {
             }
             return {
                 format: format,
+                processId: this.resolveDesignerModelKey(),
+                processName: this.resolveDesignerModelName(),
                 canvasWidth: this.canvasWidth,
                 canvasHeight: this.canvasHeight,
                 nodes: nodes,
@@ -1436,6 +2149,21 @@ window.ProcessDesigner = {
             }
             return new Blob([bytes], {type: contentType || "application/octet-stream"});
         },
+        decodeBase64ToText: function (contentBase64) {
+            var binary = window.atob(contentBase64 || "");
+            var bytes = new Uint8Array(binary.length);
+            for (var index = 0; index < binary.length; index += 1) {
+                bytes[index] = binary.charCodeAt(index);
+            }
+            if (typeof TextDecoder === "function") {
+                return new TextDecoder("utf-8").decode(bytes);
+            }
+            var text = "";
+            for (var textIndex = 0; textIndex < bytes.length; textIndex += 1) {
+                text += String.fromCharCode(bytes[textIndex]);
+            }
+            return decodeURIComponent(escape(text));
+        },
         requestProcessDesignerExport: async function (format) {
             var result = await window.AppService.requestJson("/flowable/designer/export", {
                 method: "POST",
@@ -1448,21 +2176,27 @@ window.ProcessDesigner = {
             var query = route.query || {};
             var processDefinitionId = query.processDefinitionId || "";
             var deploymentId = query.deploymentId || "";
+            var modelId = query.modelId || "";
             if (!processDefinitionId) {
                 this.importedProcessDefinitionId = "";
                 this.importedDeploymentId = deploymentId;
+                this.importedModelId = modelId;
                 this.$nextTick(this.handleCenterCanvas);
                 return;
             }
-            if (this.importedProcessDefinitionId === processDefinitionId && this.importedDeploymentId === deploymentId) {
+            if (this.importedProcessDefinitionId === processDefinitionId
+                && this.importedDeploymentId === deploymentId
+                && this.importedModelId === modelId) {
                 this.$nextTick(this.handleCenterCanvas);
                 return;
             }
             try {
                 var detail = await this.$root.fetchProcessDefinitionDetail(processDefinitionId);
                 this.importProcessDefinitionDetail(detail, deploymentId);
+                await this.loadProcessFormBindings(processDefinitionId);
                 this.importedProcessDefinitionId = processDefinitionId;
                 this.importedDeploymentId = deploymentId;
+                this.importedModelId = modelId;
                 this.$message.success("已加载部署流程到设计画布");
             } catch (error) {
                 this.$message.error(error && error.message ? error.message : "加载部署流程失败");
@@ -1476,6 +2210,9 @@ window.ProcessDesigner = {
             var detailEdges = Array.isArray(detail.sequenceFlows) ? detail.sequenceFlows : [];
             var parentMap = this.buildImportedParentMap(detail.bpmnXml);
             var propertyMap = this.buildImportedPropertiesMap(detail.bpmnXml);
+            this.importedProcessDefinitionKey = detail.processDefinitionKey || "";
+            this.importedProcessDefinitionName = detail.processDefinitionName || detail.processDefinitionKey || "";
+            this.importedProcessDefinitionCategory = detail.category || "";
             var childCountMap = {};
             for (var parentNodeId in parentMap) {
                 if (Object.prototype.hasOwnProperty.call(parentMap, parentNodeId) && parentMap[parentNodeId]) {
@@ -1610,6 +2347,7 @@ window.ProcessDesigner = {
             var properties = this.buildDefaultNodeProperties(bpmnType);
             properties.initiator = this.getAnyAttribute(element, "initiator") || "";
             properties.formKey = this.getAnyAttribute(element, "formKey") || "";
+            properties.boundFormKeys = this.parseFormKeyList(properties.formKey);
             properties.assignee = this.getAnyAttribute(element, "assignee") || "";
             properties.candidateUsers = this.getAnyAttribute(element, "candidateUsers") || "";
             properties.candidateGroups = this.getAnyAttribute(element, "candidateGroups") || "";
@@ -1641,7 +2379,30 @@ window.ProcessDesigner = {
             }
             this.fillImportedEventProperties(element, properties);
             this.fillImportedMultiInstanceProperties(element, properties);
+            this.fillImportedFormBindingProperties(element, properties);
             return properties;
+        },
+        fillImportedFormBindingProperties: function (element, properties) {
+            var propertyElements = this.findElementsByLocalName(element, "property");
+            for (var index = 0; index < propertyElements.length; index += 1) {
+                var item = propertyElements[index];
+                var name = item.getAttribute("name") || "";
+                var value = item.getAttribute("value") || "";
+                if (name === "wcdk:boundFormKeys") {
+                    properties.boundFormKeys = this.parseFormKeyList(value);
+                    properties.formKey = properties.boundFormKeys.join(",");
+                }
+                if (name === "wcdk:boundForms" && value) {
+                    try {
+                        properties.boundForms = this.normalizeBoundForms(JSON.parse(value));
+                    } catch (error) {
+                        properties.boundForms = [];
+                    }
+                }
+            }
+            if (!properties.boundFormKeys.length) {
+                properties.boundFormKeys = this.parseFormKeyList(properties.formKey);
+            }
         },
         fillImportedEventProperties: function (element, properties) {
             var messageEventDefinition = this.findFirstElementByLocalName(element, "messageEventDefinition");
@@ -1773,8 +2534,25 @@ window.ProcessDesigner = {
             return typeMap[elementType] || "";
         },
         findFirstElementByLocalName: function (root, localName) {
-            var elements = root.getElementsByTagNameNS("*", localName);
+            var elements = this.findElementsByLocalName(root, localName);
             return elements && elements.length ? elements[0] : null;
+        },
+        findElementsByLocalName: function (root, localName) {
+            if (!root) {
+                return [];
+            }
+            var elements = root.getElementsByTagNameNS ? root.getElementsByTagNameNS("*", localName) : [];
+            if (elements && elements.length) {
+                return Array.prototype.slice.call(elements);
+            }
+            var allElements = root.getElementsByTagName ? root.getElementsByTagName("*") : [];
+            var results = [];
+            for (var index = 0; index < allElements.length; index += 1) {
+                if (allElements[index].localName === localName || allElements[index].nodeName === localName) {
+                    results.push(allElements[index]);
+                }
+            }
+            return results;
         },
         toFiniteNumber: function (value, fallback) {
             var nextValue = Number(value);
@@ -2180,6 +2958,7 @@ window.ProcessDesigner = {
             this.appendListenerLines(listenerLines, "flowable:executionListener", properties.executionListeners);
             if (node.bpmnType === "userTask") {
                 this.appendListenerLines(listenerLines, "flowable:taskListener", properties.taskListeners);
+                this.appendUserTaskFormBindingLines(listenerLines, properties);
             }
             if (!listenerLines.length) {
                 return;
@@ -2189,6 +2968,19 @@ window.ProcessDesigner = {
                 lines.push(listenerLines[index]);
             }
             lines.push("      </bpmn:extensionElements>");
+        },
+        appendUserTaskFormBindingLines: function (lines, properties) {
+            var boundFormKeys = this.parseFormKeyList(properties.boundFormKeys || properties.formKey);
+            if (!boundFormKeys.length) {
+                return;
+            }
+            var boundForms = this.normalizeBoundForms(properties.boundForms);
+            lines.push("        <flowable:properties>");
+            lines.push('          <flowable:property name="wcdk:boundFormKeys" value="' + this.escapeXml(boundFormKeys.join(",")) + '" />');
+            if (boundForms.length) {
+                lines.push('          <flowable:property name="wcdk:boundForms" value="' + this.escapeXml(JSON.stringify(boundForms)) + '" />');
+            }
+            lines.push("        </flowable:properties>");
         },
         appendListenerLines: function (lines, tagName, configText) {
             var rows = String(configText || "").split(/\r?\n/);
@@ -2305,7 +3097,8 @@ window.ProcessDesigner = {
             var exportableNodes = collected.exportableNodes;
             var skippedNodes = collected.skippedNodes;
             var usedIds = {};
-            var processId = this.sanitizeBpmnId("Wcdk_" + Date.now(), "Process", usedIds);
+            var processId = this.sanitizeBpmnId(this.resolveDesignerModelKey(), "Process", usedIds);
+            var processName = this.escapeXml(this.resolveDesignerModelName());
             var definitionsId = this.sanitizeBpmnId("Definitions_" + Date.now(), "Definitions", usedIds);
             var diagramId = this.sanitizeBpmnId(processId + "_Diagram", "Diagram", usedIds);
             var planeId = this.sanitizeBpmnId(processId + "_Plane", "Plane", usedIds);
@@ -2381,7 +3174,7 @@ window.ProcessDesigner = {
                 '                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"',
                 '                  id="' + definitionsId + '"',
                 '                  targetNamespace="http://flowable.org/processdef">',
-                '  <bpmn:process id="' + processId + '" name="wcdk-process-' + processId + '" isExecutable="true">'
+                '  <bpmn:process id="' + processId + '" name="' + processName + '" isExecutable="true">'
             ];
             var containerMaps = this.buildFlowContainerMaps(exportableNodes, sequenceFlows);
             this.appendContainerFlowElements(
@@ -3267,7 +4060,7 @@ window.ProcessDesigner = {
             if (this.isExclusiveGatewayEdgeDefault(edge)) {
                 return "默认分支不需要填写条件表达式";
             }
-            return "请输入 Flowable 条件表达式，例如 ${amount > 1000}";
+            return "请输入 Flowable 条件表达式，例如 ${approved == 'return'}";
         },
         resolveNodeCenter: function (node, isSource) {
             if (!node) {
@@ -3312,6 +4105,29 @@ window.ProcessDesigner = {
             var start = this.resolveNodeCenter(sourceNode, true);
             var end = this.resolveNodeCenter(targetNode, false);
             return this.buildEdgePathByPoints(start, end);
+        },
+        resolveEdgeLabelPoint: function (edge) {
+            var sourceNode = this.findNodeById(edge.sourceId);
+            var targetNode = this.findNodeById(edge.targetId);
+            if (!sourceNode || !targetNode) {
+                return { x: 0, y: 0 };
+            }
+            var start = this.resolveNodeCenter(sourceNode, true);
+            var end = this.resolveNodeCenter(targetNode, false);
+            return {
+                x: Math.round((start.x + end.x) / 2),
+                y: Math.round((start.y + end.y) / 2 - 12)
+            };
+        },
+        resolveEdgeLabelText: function (edge) {
+            var text = String(edge && edge.name || "").trim();
+            return text.length > 18 ? text.slice(0, 18) + "..." : text;
+        },
+        resolveEdgeLabelSize: function (edge) {
+            var text = this.resolveEdgeLabelText(edge);
+            return {
+                width: Math.min(Math.max(text.length * 13 + 18, 42), 180)
+            };
         },
         normalizeCanvasX: function (value, width) {
             return Math.max(0, Math.min(Math.round(value), Math.max(this.canvasWidth - width, 0)));

@@ -3,12 +3,26 @@ server:
 spring:
   application:
     name: wcdk-process
+  cloud:
+    nacos:
+      discovery:
+        enabled: ${wcdk.process.nacos.enabled:false}
+        server-addr: 192.168.10.12:18848
+        #        namespace: 07ab382e-8c16-4b8c-a86d-df3c0933b74b
+        namespace: 35076f19-7e09-4e73-9249-29dbab1fda01
+        service: ${spring.application.name}
+        group: DEFAULT_GROUP
+        username: nacos
+        password: QxtdNacos@2025
   datasource:
     type: com.alibaba.druid.pool.DruidDataSource
-    url: jdbc:dm://localhost:25236/WCDK-PROCESS
-    username: WCDK-PROCESS
-    password: WCDK@2026
     driver-class-name: dm.jdbc.driver.DmDriver
+    url: jdbc:dm://localhost:25236/QXTD-PROCESS
+    username: QXTD-PROCESS
+    password: Qxtd@2026
+#    url: jdbc:dm://192.168.10.12:5237/ISSAM-PROCESS
+#    username: SYSDBA
+#    password: SysDba001
     druid:
       initial-size: 5
       max-active: 20
@@ -73,3 +87,5 @@ wcdk:
       title: 流程引擎接口文档
       version: 1.0
     strict-mode: true
+    nacos:
+      enabled: true

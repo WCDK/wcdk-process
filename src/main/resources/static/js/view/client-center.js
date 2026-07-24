@@ -45,6 +45,11 @@ window.ClientCenter = {
                             <span>{{ scope.row.callbackUrl || "-" }}</span>
                         </template>
                     </el-table-column>
+                    <el-table-column prop="serviceName" label="服务名" min-width="180">
+                        <template slot-scope="scope">
+                            <span>{{ scope.row.serviceName || "-" }}</span>
+                        </template>
+                    </el-table-column>
                     <el-table-column prop="clientStatus" label="客户端状态" min-width="120">
                         <template slot-scope="scope">
                             <el-tag :type="resolveClientStatusType(scope.row.clientStatus)" effect="plain">

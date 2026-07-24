@@ -193,7 +193,7 @@ window.ProcessCenter = {
                     <el-button v-if="$root.hasButton('process:refresh')" @click="handleRefresh">刷新</el-button>
                 </div>
 
-                <el-tabs v-model="activeTab" class="process-center-tabs">
+                <el-tabs v-model="activeTab" class="process-center-tabs" @tab-click="handleTabClick">
                     <el-tab-pane v-if="$root.hasTab('process:tab:create')" label="创建流程" name="create">
                         <div class="process-builder-grid">
                             <div class="process-builder-form">
@@ -393,6 +393,7 @@ window.ProcessCenter = {
                                             <div class="process-stage-title">
                                                 {{ node.elementName || node.elementId }}
                                                 <el-tag v-if="isActiveProcessNode(node.elementId)" size="mini" type="success" effect="dark">当前步骤</el-tag>
+                                                <el-tag v-if="node.approvalResultText" size="mini" :type="resolveApprovalResultTagType(node.approvalResult)" effect="plain">{{ node.approvalResultText }}</el-tag>
                                             </div>
                                             <div class="process-stage-meta">
                                                 <el-tag size="mini" :type="resolveNodeTagType(node.elementType)" effect="plain">
@@ -508,7 +509,16 @@ window.ProcessCenter = {
                                     </el-table-column>
                                     <el-table-column prop="currentTaskName" label="当前任务" min-width="140">
                                         <template slot-scope="scope">
-                                            {{ scope.row.currentTaskName || "-" }}
+                                            <div class="schema-chip-list" v-if="resolveCurrentTasks(scope.row).length">
+                                                <el-tag
+                                                    v-for="task in resolveCurrentTasks(scope.row)"
+                                                    :key="task.taskId"
+                                                    size="mini"
+                                                    effect="plain">
+                                                    {{ task.taskName || task.taskDefinitionKey || task.taskId }}
+                                                </el-tag>
+                                            </div>
+                                            <span v-else>{{ scope.row.currentTaskName || "-" }}</span>
                                         </template>
                                     </el-table-column>
                                     <el-table-column label="操作" min-width="180" fixed="right">
@@ -521,6 +531,12 @@ window.ProcessCenter = {
                                                     查看
                                                 </el-button>
                                                 <el-button
+                                                    v-if="$root.hasButton('designer:save')"
+                                                    type="text"
+                                                    @click.stop="openProcessDesigner(scope.row)">
+                                                    编辑
+                                                </el-button>
+                                                <el-button
                                                     v-if="scope.row.status === 'DRAFT' && $root.hasButton('process:submit')"
                                                     type="text"
                                                     @click.stop="submitDraft(scope.row.id)">
@@ -530,7 +546,7 @@ window.ProcessCenter = {
                                                     v-if="$root.hasButton('process:delete')"
                                                     type="text"
                                                     style="color: #f56c6c;"
-                                                    @click.stop="handleDelete(scope.row.id)">
+                                                    @click.stop="handleDelete(scope.row)">
                                                     删除
                                                 </el-button>
                                             </div>
@@ -603,6 +619,7 @@ window.ProcessCenter = {
                                                 <div class="process-stage-title">
                                                     {{ node.elementName || node.elementId }}
                                                     <el-tag v-if="isActiveProcessNode(node.elementId)" size="mini" type="success" effect="dark">当前步骤</el-tag>
+                                                    <el-tag v-if="node.approvalResultText" size="mini" :type="resolveApprovalResultTagType(node.approvalResult)" effect="plain">{{ node.approvalResultText }}</el-tag>
                                                 </div>
                                                 <div class="process-stage-meta">
                                                     <el-tag size="mini" :type="resolveNodeTagType(node.elementType)" effect="plain">
@@ -645,6 +662,7 @@ window.ProcessCenter = {
     data: function () {
         return {
             activeTab: "create",
+            processListLoaded: false,
             processStatusOptions: [
                 { value: "DRAFT", label: "草稿" },
                 { value: "PROCESSING", label: "审批中" },
@@ -667,7 +685,7 @@ window.ProcessCenter = {
     computed: {
         availableDefinitions: function () {
             return (this.$root.processDefinitions || []).filter(function (definition) {
-                return !definition.suspended;
+                return !definition.suspended && Number(definition.invalidStatus || 0) === 0;
             });
         },
         availableCategories: function () {
@@ -783,6 +801,43 @@ window.ProcessCenter = {
         },
         handleProcessRowClick: function (row) {
             this.selectedProcessId = row.id;
+        },
+        resolveCurrentTasks: function (row) {
+            return row && Array.isArray(row.currentTasks) ? row.currentTasks : [];
+        },
+        findDefinitionByKey: function (processDefinitionKey) {
+            if (!processDefinitionKey) {
+                return null;
+            }
+            var definitions = (this.$root.processDefinitions || []).filter(function (definition) {
+                return definition.processDefinitionKey === processDefinitionKey;
+            });
+            if (!definitions.length) {
+                return null;
+            }
+            return definitions.slice().sort(function (left, right) {
+                return Number(right.version || 0) - Number(left.version || 0);
+            })[0];
+        },
+        openProcessDesigner: function (row) {
+            if (!row) {
+                return;
+            }
+            var definition = row.processDefinitionId ? null : this.findDefinitionByKey(row.processDefinitionKey);
+            var processDefinitionId = row.processDefinitionId || (definition && definition.processDefinitionId) || "";
+            if (!processDefinitionId) {
+                this.$root.showError("未查询到流程定义，无法跳转编辑");
+                return;
+            }
+            var query = {
+                flg: "update",
+                processDefinitionId: processDefinitionId
+            };
+            var deploymentId = row.deploymentId || (definition && definition.deploymentId) || "";
+            if (deploymentId) {
+                query.deploymentId = deploymentId;
+            }
+            this.$router.push({path: "/designer", query: query});
         },
         openProcessDetail: async function (row) {
             this.selectedProcessId = row.id;
@@ -1014,7 +1069,7 @@ window.ProcessCenter = {
                 ServiceTask: "服务任务",
                 ExclusiveGateway: "排他网关",
                 ParallelGateway: "并行网关",
-                InclusiveGateway: "包容网关"
+                InclusiveGateway: "聚合网关"
             };
             return mapping[elementType] || elementType;
         },
@@ -1043,6 +1098,18 @@ window.ProcessCenter = {
                 return "warning";
             }
             return "";
+        },
+        resolveApprovalResultTagType: function (approvalResult) {
+            if (approvalResult === "PROCESSING") {
+                return "success";
+            }
+            if (approvalResult === "REJECT") {
+                return "danger";
+            }
+            if (approvalResult === "PASS") {
+                return "primary";
+            }
+            return "info";
         },
         resolveNodeIndex: function (elementId, nodes) {
             var targetNodes = nodes || [];
@@ -1245,8 +1312,13 @@ window.ProcessCenter = {
                 this.$root.showError(error.message || "流程申请提交失败");
             }
         },
-        handleDelete: function (id) {
+        handleDelete: function (row) {
             var self = this;
+            var id = row && row.id;
+            if (row && row.status === "PROCESSING") {
+                this.$root.showError("当前流程正在审批中，禁止删除");
+                return;
+            }
             this.$confirm("删除后将同时清除流程申请及关联流程、任务数据，是否继续？", "删除流程数据", {
                 type: "warning",
                 confirmButtonText: "确定删除",
@@ -1258,29 +1330,42 @@ window.ProcessCenter = {
                     self.$root.selectedProcessRequestDiagramDetail = null;
                 }
                 self.selectFirstProcessRow();
-            }).catch(function () {});
+            }).catch(function (error) {
+                if (!error || error === "cancel" || error === "close") {
+                    return;
+                }
+                self.$root.showError(error.message || "流程申请删除失败");
+            });
         },
         handleRefresh: async function () {
             if (this.activeTab === "list") {
                 await this.$root.loadProcesses(this.$root.processPageNum, this.$root.processPageSize);
+                this.processListLoaded = true;
                 this.selectFirstProcessRow();
                 return;
             }
-            await Promise.all([
-                this.$root.loadDefinitions(),
-                this.$root.loadProcesses(this.$root.processPageNum, this.$root.processPageSize)
-            ]);
+            await this.$root.loadDefinitions();
+        },
+        handleTabClick: async function () {
+            if (this.activeTab === "list" && !this.processListLoaded) {
+                await this.$root.loadProcesses(this.$root.processPageNum, this.$root.processPageSize);
+                this.processListLoaded = true;
+                this.selectFirstProcessRow();
+            }
         },
         handleProcessPageChange: async function (pageNum) {
             await this.$root.loadProcesses(pageNum, this.$root.processPageSize);
+            this.processListLoaded = true;
             this.selectFirstProcessRow();
         },
         handleProcessSizeChange: async function (pageSize) {
             await this.$root.loadProcesses(1, pageSize);
+            this.processListLoaded = true;
             this.selectFirstProcessRow();
         },
         handleQuery: async function () {
             await this.$root.loadProcesses(1, this.$root.processPageSize);
+            this.processListLoaded = true;
             this.selectFirstProcessRow();
         },
         handleResetQuery: async function () {
@@ -1291,6 +1376,7 @@ window.ProcessCenter = {
             this.$root.processFilters.processDefinitionKey = "";
             this.$root.processFilters.status = "";
             await this.$root.loadProcesses(1, this.$root.processPageSize);
+            this.processListLoaded = true;
             this.selectFirstProcessRow();
         },
         selectFirstProcessRow: function () {
@@ -1304,15 +1390,11 @@ window.ProcessCenter = {
         }
     },
     mounted: async function () {
-        await Promise.all([
-            this.$root.loadDefinitions(),
-            this.$root.loadProcesses(this.$root.processPageNum, this.$root.processPageSize)
-        ]);
+        await this.$root.loadDefinitions();
         var routeApplied = await this.applyRouteDefinitionSelection();
         if (!routeApplied) {
             this.resetForm();
         }
-        this.selectFirstProcessRow();
     },
     watch: {
         selectedDetail: function () {

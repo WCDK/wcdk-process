@@ -15,7 +15,7 @@ window.ModelCenter = {
                     <el-button v-if="$root.hasButton('model:refresh')" @click="handleRefresh">刷新</el-button>
                 </div>
 
-                <el-tabs v-model="activeTab" class="center-tabs">
+                <el-tabs v-model="activeTab" class="center-tabs" @tab-click="handleTabClick">
                     <el-tab-pane v-if="$root.hasTab('model:tab:create')" label="创建模型" name="create">
                         <div >
                             <div>
@@ -267,6 +267,7 @@ window.ModelCenter = {
             sortOrder: "descending",
             editingModelId: "",
             selectedModelId: "",
+            listLoaded: false,
             clientOptions: [],
             deployDialogVisible: false,
             deploySaving: false,
@@ -538,11 +539,13 @@ window.ModelCenter = {
         },
         handleRefresh: async function () {
             await this.$root.loadModels(this.filters);
+            this.listLoaded = true;
             this.selectFirstModel();
         },
         handleQuery: async function () {
             this.pageNum = 1;
             await this.$root.loadModels(this.filters);
+            this.listLoaded = true;
             this.selectFirstFromFiltered();
         },
         handleResetQuery: async function () {
@@ -554,7 +557,13 @@ window.ModelCenter = {
             this.sortProp = "lastUpdateTime";
             this.sortOrder = "descending";
             await this.$root.loadModels(this.filters);
+            this.listLoaded = true;
             this.selectFirstModel();
+        },
+        handleTabClick: async function () {
+            if (this.activeTab === "list" && !this.listLoaded) {
+                await this.handleRefresh();
+            }
         },
         handlePageChange: function (pageNum) {
             this.pageNum = pageNum;
@@ -824,14 +833,12 @@ window.ModelCenter = {
                 ServiceTask: "服务任务",
                 ExclusiveGateway: "排他网关",
                 ParallelGateway: "并行网关",
-                InclusiveGateway: "包容网关"
+                InclusiveGateway: "聚合网关"
             };
             return mapping[elementType] || elementType;
         }
     },
-    mounted: async function () {
-        await this.$root.loadModels(this.filters);
-        this.selectFirstModel();
+    mounted: function () {
     },
     watch: {
         "$root.models": function () {

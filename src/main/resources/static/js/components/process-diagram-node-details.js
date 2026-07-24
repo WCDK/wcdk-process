@@ -43,7 +43,8 @@ window.ProcessDiagramNodePropertySupport = {
         merge(node && node.propertyMap);
         merge(node && node.config);
         var directKeys = [
-            "initiator", "formKey", "assignee", "candidateUsers", "candidateGroups", "dueDate", "priority",
+            "initiator", "formKey", "boundFormKeys", "boundForms", "assignee", "candidateUsers", "candidateGroups", "dueDate", "priority",
+            "approvalResult", "approvalResultText", "approvalAssignee", "approvalComment",
             "className", "delegateExpression", "expression", "resultVariable", "scriptFormat", "script",
             "calledElement", "messageRef", "timerDefinition", "signalRef", "errorRef", "eventDefinitionType",
             "collection", "elementVariable", "completionCondition", "skipExpression", "async", "exclusive",
@@ -57,6 +58,17 @@ window.ProcessDiagramNodePropertySupport = {
         }
         if (!result.className && result["class"]) {
             result.className = result["class"];
+        }
+        if (Array.isArray(result.boundForms) && result.boundForms.length) {
+            result.boundFormNames = result.boundForms.map(function (form) {
+                var formKey = form && form.formKey ? form.formKey : "";
+                var formName = form && form.formName ? form.formName : formKey;
+                return formKey ? formName + "（" + formKey + "）" : "";
+            }).filter(function (item) {
+                return !!item;
+            }).join("、");
+        } else if (Array.isArray(result.boundFormKeys) && result.boundFormKeys.length) {
+            result.boundFormNames = result.boundFormKeys.join("、");
         }
         if (typeof result.async === "string") {
             result.async = result.async === "true";
@@ -137,6 +149,7 @@ window.ProcessDiagramCommonNodeDetail = {
         rows: function () {
             return this.buildRows([
                 { label: "表单标识", value: this.properties.formKey },
+                { label: "绑定表单", value: this.properties.boundFormNames },
                 { label: "办理人", value: this.properties.assignee },
                 { label: "候选用户", value: this.properties.candidateUsers },
                 { label: "候选组", value: this.properties.candidateGroups },
@@ -180,7 +193,11 @@ window.ProcessDiagramUserTaskDetail = {
     computed: {
         rows: function () {
             return this.buildRows([
+                { label: "审批结果", value: this.properties.approvalResultText },
+                { label: "审批人", value: this.properties.approvalAssignee },
+                { label: "审批意见", value: this.properties.approvalComment },
                 { label: "表单标识", value: this.properties.formKey },
+                { label: "绑定表单", value: this.properties.boundFormNames },
                 { label: "办理人", value: this.properties.assignee },
                 { label: "候选用户", value: this.properties.candidateUsers },
                 { label: "候选组", value: this.properties.candidateGroups },
@@ -386,6 +403,22 @@ window.ProcessDiagramNodeDetail = {
                 <strong>{{ resolveNodeTypeLabel(node.elementType) || node.elementType || "-" }}</strong>
             </div>
             <component :is="detailComponentName" :node="node" :properties="properties"></component>
+            <div class="process-node-bound-form-list" v-if="boundForms.length">
+                <div class="process-node-bound-form-head">
+                    <span>绑定表单</span>
+                    <strong>{{ boundForms.length }} 个</strong>
+                </div>
+                <div
+                    v-for="form in boundForms"
+                    :key="form.formKey"
+                    class="process-node-bound-form-item">
+                    <div class="process-node-bound-form-name">
+                        <strong>{{ form.formName || form.formKey }}</strong>
+                        <span>{{ form.formKey }}<template v-if="form.formVersion"> / v{{ form.formVersion }}</template></span>
+                    </div>
+                    <el-button size="mini" type="text" @click="$emit('view-bound-form', form)">查看表单</el-button>
+                </div>
+            </div>
             <div class="process-node-detail-row">
                 <span>入口数量</span>
                 <strong>{{ node.incomingCount || 0 }}</strong>
@@ -414,6 +447,19 @@ window.ProcessDiagramNodeDetail = {
         properties: function () {
             return window.ProcessDiagramNodePropertySupport.normalizeNodeProperties(this.node);
         },
+        boundForms: function () {
+            var forms = Array.isArray(this.properties.boundForms) ? this.properties.boundForms : [];
+            if (forms.length) {
+                return this.normalizeBoundForms(forms);
+            }
+            var formKeys = Array.isArray(this.properties.boundFormKeys)
+                ? this.properties.boundFormKeys
+                : String(this.properties.formKey || "").split(",");
+            return this.normalizeBoundForms(formKeys.map(function (formKey) {
+                var key = String(formKey || "").trim();
+                return key ? { formKey: key, formName: key } : null;
+            }));
+        },
         detailComponentName: function () {
             var mapping = {
                 StartEvent: "process-diagram-start-event-detail",
@@ -437,6 +483,25 @@ window.ProcessDiagramNodeDetail = {
                 TextAnnotation: "process-diagram-annotation-detail"
             };
             return mapping[this.node.elementType] || "process-diagram-common-node-detail";
+        }
+    },
+    methods: {
+        normalizeBoundForms: function (forms) {
+            var results = [];
+            var usedKeys = {};
+            for (var index = 0; index < (forms || []).length; index += 1) {
+                var form = forms[index] || {};
+                var formKey = String(form.formKey || "").trim();
+                if (!formKey || usedKeys[formKey]) {
+                    continue;
+                }
+                usedKeys[formKey] = true;
+                results.push(Object.assign({}, form, {
+                    formKey: formKey,
+                    formName: form.formName || formKey
+                }));
+            }
+            return results;
         }
     }
 };

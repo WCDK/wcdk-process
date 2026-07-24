@@ -60,6 +60,14 @@ window.ProcessDiagram = {
                             <span class="process-diagram-tooltip-label">标识</span>
                             <span>{{ hoverTooltip.node.elementId || '-' }}</span>
                         </div>
+                        <div class="process-diagram-tooltip-row" v-if="resolveNodeBoundFormCount(hoverTooltip.node)">
+                            <span class="process-diagram-tooltip-label">表单</span>
+                            <span>已绑 {{ resolveNodeBoundFormCount(hoverTooltip.node) }} 个</span>
+                        </div>
+                        <div class="process-diagram-tooltip-row" v-if="hoverTooltip.node.approvalResultText">
+                            <span class="process-diagram-tooltip-label">审批</span>
+                            <span>{{ hoverTooltip.node.approvalResultText }}</span>
+                        </div>
                     </div>
                 </div>
                 <el-dialog
@@ -69,8 +77,36 @@ window.ProcessDiagram = {
                     <process-diagram-node-detail
                         v-if="selectedNode"
                         :node="selectedNode"
-                        :resolve-node-type-label="resolveNodeTypeLabel">
+                        :resolve-node-type-label="resolveNodeTypeLabel"
+                        @view-bound-form="handleViewBoundForm">
                     </process-diagram-node-detail>
+                </el-dialog>
+                <el-dialog
+                    :title="selectedBoundForm ? '查看表单：' + (selectedBoundForm.formName || selectedBoundForm.formKey || '-') : '查看表单'"
+                    :visible.sync="formPreviewVisible"
+                    width="920px"
+                    top="6vh"
+                    class="canvas-form-preview-dialog"
+                    @opened="handleFormPreviewOpened"
+                    @closed="handleFormPreviewClosed">
+                    <div v-if="selectedBoundForm" class="process-bound-form-preview">
+                        <div class="process-bound-form-preview-meta">
+                            <span class="mini-tag">表单名称：{{ selectedBoundForm.formName || "-" }}</span>
+                            <span class="mini-tag">表单标识：{{ selectedBoundForm.formKey || "-" }}</span>
+                            <span class="mini-tag">版本：{{ selectedBoundForm.formVersion || "-" }}</span>
+                        </div>
+                        <div
+                            ref="formPreviewBody"
+                            class="canvas-form-preview-dialog-body"
+                            v-html="formPreviewHtml"
+                            @click.capture="handleFormPreviewClick"
+                            @change.capture="handleFormPreviewChange"
+                            @submit.prevent>
+                        </div>
+                    </div>
+                    <div v-else class="empty-panel process-diagram-empty">
+                        未选择可查看的表单。
+                    </div>
                 </el-dialog>
             </div>
             <div class="empty-panel process-diagram-empty" v-else>
@@ -104,6 +140,10 @@ window.ProcessDiagram = {
             },
             nodeDetailVisible: false,
             selectedNode: null,
+            formPreviewVisible: false,
+            selectedBoundForm: null,
+            formPreviewHtml: "",
+            formPreviewContext: null,
             hoverPathTimer: null,
             hoverPathNodeId: "",
             hoverPath: {
@@ -176,6 +216,14 @@ window.ProcessDiagram = {
                 ".process-node-detail-row strong{color:#1f2a44;font-size:13px;text-align:right;word-break:break-word;}",
                 ".process-node-detail-desc{padding:10px 12px;border:1px solid #e5edf7;border-radius:10px;background:#f8fbff;}",
                 ".process-node-detail-desc p{margin:8px 0 0;color:#1f2a44;line-height:1.7;word-break:break-word;}",
+                ".process-node-bound-form-list{display:grid;gap:8px;padding:10px 12px;border:1px solid #d7eadf;border-radius:10px;background:#f4fbf7;}",
+                ".process-node-bound-form-head{display:flex;align-items:center;justify-content:space-between;gap:10px;color:#166534;font-size:13px;font-weight:700;}",
+                ".process-node-bound-form-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid #dbeee2;}",
+                ".process-node-bound-form-name{min-width:0;color:#1f2a44;font-size:13px;line-height:1.5;}",
+                ".process-node-bound-form-name strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}",
+                ".process-node-bound-form-name span{color:#64748b;font-size:12px;}",
+                ".process-bound-form-preview-meta{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;}",
+                ".process-bound-form-preview .canvas-form-preview-dialog-body{max-height:68vh;overflow:auto;padding:18px;background:#f2f4f8;border-radius:12px;}",
                 ".process-diagram-empty{padding:36px 18px;border:1px dashed #d8e3f4;border-radius:18px;background:#f8fbff;}"
             ].join("");
             document.head.appendChild(style);
@@ -356,6 +404,66 @@ window.ProcessDiagram = {
             }
             this.selectedNode = node;
             this.nodeDetailVisible = true;
+        },
+        handleViewBoundForm: async function (form) {
+            if (!form || !form.formKey) {
+                this.$message && this.$message.warning("未找到可查看的表单");
+                return;
+            }
+            var nextForm = this.hasBoundFormSchema(form) ? form : await this.loadBoundFormSchema(form);
+            this.selectedBoundForm = nextForm;
+            this.formPreviewContext = this.createFormPreviewContext(nextForm);
+            this.formPreviewHtml = this.formPreviewContext
+                ? this.formPreviewContext.buildDialogPreviewHtml()
+                : this.buildBoundFormPreviewHtml(nextForm);
+            this.formPreviewVisible = true;
+        },
+        hasBoundFormSchema: function (form) {
+            return Array.isArray(form && form.schema) || (typeof (form && form.schema) === "string" && form.schema.trim());
+        },
+        loadBoundFormSchema: async function (form) {
+            if (!window.AppService || !form || !form.formKey) {
+                return form;
+            }
+            try {
+                var result = await window.AppService.request("/process/form/key/" + encodeURIComponent(form.formKey));
+                if (!result || !result.data) {
+                    return form;
+                }
+                return Object.assign({}, form, result.data);
+            } catch (error) {
+                return form;
+            }
+        },
+        handleFormPreviewOpened: function () {
+            var context = this.formPreviewContext;
+            var container = this.$refs.formPreviewBody;
+            if (context && container && typeof context.loadPreviewOptionData === "function") {
+                context.loadPreviewOptionData(container);
+            }
+        },
+        handleFormPreviewClosed: function () {
+            this.selectedBoundForm = null;
+            this.formPreviewHtml = "";
+            this.formPreviewContext = null;
+        },
+        handleFormPreviewClick: function (event) {
+            if (this.formPreviewContext && typeof this.formPreviewContext.handlePreviewTrigger === "function") {
+                this.formPreviewContext.handlePreviewTrigger(event, "click");
+            }
+        },
+        handleFormPreviewChange: function (event) {
+            var context = this.formPreviewContext;
+            if (!context) {
+                return;
+            }
+            if (event.target && event.target.classList && event.target.classList.contains("canvas-form-preview-select-input")
+                && typeof context.syncPreviewDatalistValue === "function") {
+                context.syncPreviewDatalistValue(event.target);
+            }
+            if (typeof context.handlePreviewTrigger === "function") {
+                context.handlePreviewTrigger(event, "onchange");
+            }
         },
         handleCanvasMouseDown: function (event) {
             if (!event || event.button !== 0) {
@@ -805,9 +913,10 @@ window.ProcessDiagram = {
                 context.shadowBlur = isHoverEdge ? 16 : (isActiveEdge ? 12 : 4);
                 var startPoint = this.resolveExitPoint(sourceNode, minX, minY, padding);
                 var endPoint = this.resolveEntryPoint(targetNode, minX, minY, padding);
-                this.drawDesignerLikeEdgePath(context, startPoint, endPoint);
+                var labelPoint = this.drawDesignerLikeEdgePath(context, startPoint, endPoint);
                 this.drawArrowHead(context, endPoint.x, endPoint.y, isHoverEdge ? "#f97316" : (isActiveEdge ? "#22c55e" : "#8fa3bf"));
                 context.restore();
+                this.drawEdgeLabel(context, edge.elementName || edge.name || "", labelPoint, isHoverEdge, isActiveEdge);
             }
         },
         drawDesignerLikeEdgePath: function (context, startPoint, endPoint) {
@@ -824,6 +933,37 @@ window.ProcessDiagram = {
             context.lineTo(endTurnX, endPoint.y);
             context.lineTo(endPoint.x, endPoint.y);
             context.stroke();
+            return {
+                x: (midX + endTurnX) / 2,
+                y: (startPoint.y + endPoint.y) / 2
+            };
+        },
+        drawEdgeLabel: function (context, text, point, isHoverEdge, isActiveEdge) {
+            var label = String(text || "").trim();
+            if (!label || !point) {
+                return;
+            }
+            var displayText = label.length > 18 ? label.slice(0, 18) + "..." : label;
+            context.save();
+            context.font = "600 12px Microsoft YaHei";
+            context.textAlign = "center";
+            context.textBaseline = "middle";
+            var width = Math.min(Math.max(context.measureText(displayText).width + 18, 42), 180);
+            var height = 24;
+            var x = point.x - width / 2;
+            var y = point.y - height / 2 - 10;
+            context.shadowColor = "rgba(15,23,42,0.12)";
+            context.shadowBlur = 8;
+            context.fillStyle = "rgba(255,255,255,0.94)";
+            context.strokeStyle = isHoverEdge ? "#fb923c" : (isActiveEdge ? "#86efac" : "#d8e3f4");
+            context.lineWidth = 1;
+            this.drawRoundedRect(context, x, y, width, height, 12);
+            context.fill();
+            context.stroke();
+            context.shadowBlur = 0;
+            context.fillStyle = isHoverEdge ? "#c2410c" : (isActiveEdge ? "#15803d" : "#556b8b");
+            context.fillText(displayText, point.x, y + height / 2 + 1);
+            context.restore();
         },
         drawSubProcessContainers: function (context, nodes, minX, minY, padding, activeNodeIds) {
             if (!nodes || !nodes.length) {
@@ -1105,7 +1245,58 @@ window.ProcessDiagram = {
             context.fillStyle = theme.title;
             context.font = "600 14px Microsoft YaHei";
             context.fillText(title, x + width / 2, y + height / 2);
+            this.drawBoundFormBadge(context, node, x, y, width, height, theme);
+            this.drawApprovalResultBadge(context, node, x, y, width, height);
             context.restore();
+        },
+        drawApprovalResultBadge: function (context, node, x, y, width, height) {
+            if (!node || node.elementType !== "UserTask" || !node.approvalResultText) {
+                return;
+            }
+            var color = this.resolveApprovalResultColor(node.approvalResult);
+            var text = node.approvalResultText;
+            context.font = "600 11px Microsoft YaHei";
+            var badgeWidth = Math.min(Math.max(context.measureText(text).width + 16, 48), width - 10);
+            var badgeHeight = 22;
+            var badgeX = x + 6;
+            var badgeY = y + height - badgeHeight - 6;
+            context.fillStyle = color.fill;
+            context.strokeStyle = color.stroke;
+            context.lineWidth = 1;
+            this.drawRoundedRect(context, badgeX, badgeY, badgeWidth, badgeHeight, 10);
+            context.fill();
+            context.stroke();
+            context.fillStyle = color.text;
+            context.fillText(text, badgeX + badgeWidth / 2, badgeY + badgeHeight / 2 + 1);
+        },
+        resolveApprovalResultColor: function (result) {
+            if (result === "REJECT") {
+                return { fill: "#fff1f2", stroke: "#fb7185", text: "#be123c" };
+            }
+            if (result === "PROCESSING") {
+                return { fill: "#ecfdf5", stroke: "#22c55e", text: "#15803d" };
+            }
+            return { fill: "#eff6ff", stroke: "#60a5fa", text: "#1d4ed8" };
+        },
+        drawBoundFormBadge: function (context, node, x, y, width, height, theme) {
+            var count = this.resolveNodeBoundFormCount(node);
+            if (!count) {
+                return;
+            }
+            var text = count + " 表单";
+            context.font = "600 11px Microsoft YaHei";
+            var badgeWidth = Math.min(Math.max(context.measureText(text).width + 16, 54), width - 10);
+            var badgeHeight = 22;
+            var badgeX = x + width - badgeWidth - 6;
+            var badgeY = y + 6;
+            context.fillStyle = "#ecfdf5";
+            context.strokeStyle = "#22c55e";
+            context.lineWidth = 1;
+            this.drawRoundedRect(context, badgeX, badgeY, badgeWidth, badgeHeight, 10);
+            context.fill();
+            context.stroke();
+            context.fillStyle = theme.subTitle || "#15803d";
+            context.fillText(text, badgeX + badgeWidth / 2, badgeY + badgeHeight / 2 + 1);
         },
         resolveNodeSummary: function (node) {
             var sourceText = node.elementName || node.elementId || "";
@@ -1117,6 +1308,85 @@ window.ProcessDiagram = {
         },
         resolveTooltipTitle: function (node) {
             return node.elementName || node.elementId || "-";
+        },
+        resolveNodeBoundFormCount: function (node) {
+            return this.resolveNodeBoundForms(node).length;
+        },
+        resolveNodeBoundForms: function (node) {
+            if (!node || node.elementType !== "UserTask") {
+                return [];
+            }
+            var forms = Array.isArray(node.boundForms) ? node.boundForms : [];
+            if (forms.length) {
+                return forms.filter(function (form) {
+                    return form && form.formKey;
+                });
+            }
+            var formKeys = [];
+            if (Array.isArray(node.boundFormKeys)) {
+                formKeys = node.boundFormKeys;
+            } else if (node.formKey) {
+                formKeys = String(node.formKey).split(",");
+            }
+            return formKeys.map(function (formKey) {
+                return String(formKey || "").trim();
+            }).filter(function (formKey, index, array) {
+                return !!formKey && array.indexOf(formKey) === index;
+            }).map(function (formKey) {
+                return {
+                    formKey: formKey,
+                    formName: formKey
+                };
+            });
+        },
+        buildBoundFormPreviewHtml: function (form) {
+            var previewContext = this.createFormPreviewContext(form);
+            if (!previewContext) {
+                return "<div class=\"canvas-form-empty\" style=\"margin:24px;\">表单预览组件未加载</div>";
+            }
+            return previewContext.buildDialogPreviewHtml();
+        },
+        createFormPreviewContext: function (form) {
+            var schema = this.resolveBoundFormSchema(form);
+            if (!window.CanvasFormDesigner || !window.CanvasFormDesigner.methods) {
+                return null;
+            }
+            var methods = window.CanvasFormDesigner.methods;
+            var previewContext = {
+                fields: [],
+                height: 620,
+                readonly: true
+            };
+            for (var methodName in methods) {
+                if (Object.prototype.hasOwnProperty.call(methods, methodName)) {
+                    previewContext[methodName] = methods[methodName];
+                }
+            }
+            if (typeof previewContext.ensureStyle === "function") {
+                previewContext.ensureStyle();
+            }
+            previewContext.fields = typeof previewContext.normalizeFields === "function"
+                ? previewContext.normalizeFields(schema)
+                : schema;
+            if (typeof previewContext.buildDialogPreviewHtml !== "function") {
+                return null;
+            }
+            return previewContext;
+        },
+        resolveBoundFormSchema: function (form) {
+            var schema = form && form.schema;
+            if (Array.isArray(schema)) {
+                return schema;
+            }
+            if (typeof schema === "string" && schema.trim()) {
+                try {
+                    var parsed = JSON.parse(schema);
+                    return Array.isArray(parsed) ? parsed : [];
+                } catch (error) {
+                    return [];
+                }
+            }
+            return [];
         },
         resolveNodePropertySummaries: function (node) {
             if (window.ProcessDiagramNodePropertySupport) {
@@ -1246,7 +1516,7 @@ window.ProcessDiagram = {
             merge(node && node.propertyMap);
             merge(node && node.config);
             var directKeys = [
-                "initiator", "formKey", "assignee", "candidateUsers", "candidateGroups", "dueDate", "priority",
+                "initiator", "formKey", "boundFormKeys", "boundForms", "assignee", "candidateUsers", "candidateGroups", "dueDate", "priority",
                 "className", "delegateExpression", "expression", "resultVariable", "scriptFormat", "script",
                 "calledElement", "messageRef", "timerDefinition", "signalRef", "errorRef", "eventDefinitionType",
                 "collection", "elementVariable", "completionCondition", "skipExpression", "async", "exclusive",
@@ -1323,7 +1593,7 @@ window.ProcessDiagram = {
                 IntermediateThrowEvent: "中间抛出事件",
                 ExclusiveGateway: "排他网关",
                 ParallelGateway: "并行网关",
-                InclusiveGateway: "包容网关",
+                InclusiveGateway: "聚合网关",
                 EventGateway: "事件网关",
                 TextAnnotation: "注释",
                 SequenceFlow: "连线"
@@ -1602,6 +1872,15 @@ window.ProcessDiagramUtils = {
             for (var fieldIndex = 0; fieldIndex < extensionChildren.length; fieldIndex += 1) {
                 var field = extensionChildren[fieldIndex];
                 var fieldLocalName = field.localName || field.nodeName || "";
+                if (fieldLocalName === "property") {
+                    var propertyName = field.getAttribute("name") || "";
+                    if (!propertyName) {
+                        continue;
+                    }
+                    var normalizedName = this.normalizeExtensionPropertyName(propertyName);
+                    result[normalizedName] = this.parseExtensionPropertyValue(normalizedName, field.getAttribute("value") || "");
+                    continue;
+                }
                 if (fieldLocalName !== "field") {
                     continue;
                 }
@@ -1609,10 +1888,27 @@ window.ProcessDiagramUtils = {
                 if (!fieldName) {
                     continue;
                 }
-                result[fieldName] = this.extractExtensionFieldValue(field);
+                result[this.normalizeExtensionPropertyName(fieldName)] = this.extractExtensionFieldValue(field);
             }
         }
         return result;
+    },
+    normalizeExtensionPropertyName: function (name) {
+        var value = String(name || "");
+        if (value.indexOf("wcdk:") === 0) {
+            value = value.substring(5);
+        }
+        return value;
+    },
+    parseExtensionPropertyValue: function (name, value) {
+        if ((name === "boundForms" || name === "boundFormKeys") && value) {
+            try {
+                return name === "boundForms" ? JSON.parse(value) : String(value).split(",");
+            } catch (error) {
+                return name === "boundForms" ? [] : String(value).split(",");
+            }
+        }
+        return value;
     },
     extractExtensionFieldValue: function (fieldElement) {
         var directValue = this.getAnyAttribute(fieldElement, "stringValue")
@@ -1726,7 +2022,7 @@ window.ProcessDiagramUtils = {
             IntermediateThrowEvent: "中间抛出事件",
             ExclusiveGateway: "排他网关",
             ParallelGateway: "并行网关",
-            InclusiveGateway: "包容网关",
+            InclusiveGateway: "聚合网关",
             EventGateway: "事件网关",
             TextAnnotation: "注释"
         };

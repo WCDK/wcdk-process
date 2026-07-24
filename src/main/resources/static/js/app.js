@@ -233,8 +233,6 @@ new Vue({
             window.AppService.setToken(loginResult.token);
             window.AppService.setCurrentUserCache(loginResult.currentUser);
             this.currentUser = loginResult.currentUser;
-            await this.loadBaseOptions();
-            await this.reloadAll();
             this.authReady = true;
             this.redirectToFirstVisibleMenu();
         },
@@ -262,8 +260,6 @@ new Vue({
                 var result = await window.AppService.request("/auth/me");
                 this.currentUser = result.data || null;
                 window.AppService.setCurrentUserCache(this.currentUser);
-                await this.loadBaseOptions();
-                await this.reloadAll();
                 this.authReady = true;
                 if (this.isLoginRoute) {
                     this.redirectToFirstVisibleMenu();
@@ -495,7 +491,14 @@ new Vue({
         },
         approveTask: async function (payload) {
             var result = await window.AppService.requestJson("/process/request/approve", { method: "POST", body: JSON.stringify(payload) });
-            this.showSuccess(result.message || "流程任务审批成功");
+            var defaultMessage = "流程任务审批通过";
+            if (payload && payload.approvalAction === "FAIL") {
+                defaultMessage = "流程任务审批不通过";
+            }
+            if (payload && payload.approvalAction === "REJECT") {
+                defaultMessage = "流程任务已驳回至上一任务";
+            }
+            this.showSuccess(result.message || defaultMessage);
             await Promise.all([this.loadProcesses(), this.loadTasks(this.taskAssignee)]);
         },
         deleteTaskById: async function (taskId) {

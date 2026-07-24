@@ -48,6 +48,21 @@ window.TaskCenter = {
                                     {{ scope.row.currentTaskName || "-" }}
                                 </template>
                             </el-table-column>
+                            <el-table-column label="并行待办" min-width="220">
+                                <template slot-scope="scope">
+                                    <div class="schema-chip-list" v-if="resolveParallelTasks(scope.row).length">
+                                        <el-tag
+                                            v-for="task in resolveParallelTasks(scope.row)"
+                                            :key="task.taskId"
+                                            size="mini"
+                                            effect="plain"
+                                            :type="task.taskId === scope.row.taskId ? 'warning' : ''">
+                                            {{ task.taskName || task.taskDefinitionKey || task.taskId }}
+                                        </el-tag>
+                                    </div>
+                                    <span v-else>-</span>
+                                </template>
+                            </el-table-column>
                             <el-table-column prop="assignee" label="办理人" min-width="120" sortable="custom">
                                 <template slot-scope="scope">
                                     {{ scope.row.assignee || "-" }}
@@ -132,13 +147,14 @@ window.TaskCenter = {
                                 </el-input>
                             </el-form-item>
                             <el-form-item label="审批结果">
-                                <el-radio-group v-model="form.approved">
-                                    <el-radio :label="true">审批通过</el-radio>
-                                    <el-radio :label="false">审批驳回</el-radio>
+                                <el-radio-group v-model="form.approvalAction">
+                                    <el-radio label="PASS">通过</el-radio>
+                                    <el-radio label="FAIL">不通过</el-radio>
+                                    <el-radio label="REJECT">驳回</el-radio>
                                 </el-radio-group>
                             </el-form-item>
                             <div class="form-actions">
-                                <el-button v-if="$root.hasButton('task:approve')" type="primary" @click="submitApproval">提交审批结果</el-button>
+                                <el-button v-if="$root.hasButton('task:approve')" type="primary" @click="submitApproval">{{ submitButtonText }}</el-button>
                                 <el-button @click="approvalDialogVisible = false">取消</el-button>
                             </div>
                         </el-form>
@@ -207,7 +223,7 @@ window.TaskCenter = {
             form: {
                 taskId: "",
                 comment: "",
-                approved: true
+                approvalAction: "PASS"
             },
             pageNum: 1,
             pageSize: 10,
@@ -264,6 +280,15 @@ window.TaskCenter = {
         activeTaskNodeIds: function () {
             var detail = this.taskDetail;
             return detail && Array.isArray(detail.activeNodeIds) ? detail.activeNodeIds : [];
+        },
+        submitButtonText: function () {
+            if (this.form.approvalAction === "FAIL") {
+                return "提交不通过";
+            }
+            if (this.form.approvalAction === "REJECT") {
+                return "提交驳回";
+            }
+            return "提交通过";
         }
     },
     mounted: async function () {
@@ -287,6 +312,9 @@ window.TaskCenter = {
                 }
                 return leftValue > rightValue ? direction : -direction;
             });
+        },
+        resolveParallelTasks: function (row) {
+            return row && Array.isArray(row.parallelTasks) ? row.parallelTasks : [];
         },
         queryTasks: async function () {
             try {
@@ -322,7 +350,8 @@ window.TaskCenter = {
                 await this.$root.approveTask({
                     taskId: this.form.taskId,
                     comment: this.form.comment,
-                    approved: this.form.approved
+                    approved: this.form.approvalAction === "PASS",
+                    approvalAction: this.form.approvalAction
                 });
                 this.resetApprovalForm();
                 this.approvalDialogVisible = false;
@@ -335,14 +364,14 @@ window.TaskCenter = {
         resetApprovalForm: function () {
             this.form.taskId = "";
             this.form.comment = "";
-            this.form.approved = true;
+            this.form.approvalAction = "PASS";
         },
         openApproval: function (row) {
             this.selectedTaskId = row.taskId;
             this.approvalTaskId = row.taskId || "";
             this.form.taskId = row.taskId || "";
             this.form.comment = "";
-            this.form.approved = true;
+            this.form.approvalAction = "PASS";
             this.approvalDialogVisible = true;
         },
         openTaskDetail: async function (row) {

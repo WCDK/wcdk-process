@@ -9,8 +9,6 @@ import org.flowable.engine.runtime.ProcessInstance;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
-import java.util.Map;
-
 /**
  * @auther WCDK
  * @date 2026/7/16
@@ -39,12 +37,27 @@ public class WcdkProcessCallbackServiceImpl implements WcdkProcessCallbackServic
                 .processInstanceId(resolveProcessInstanceId(request))
                 .processDefinitionId(resolveProcessDefinitionId(request))
                 .processDefinitionKey(resolveProcessDefinitionKey(request))
+                .processDefinitionName(request.getProcessDefinitionName())
                 .businessKey(resolveBusinessKey(request))
+                .approvalId(request.getApprovalId())
+                .approvalName(request.getApprovalName())
+                .currentTaskId(request.getCurrentTaskId())
+                .currentTaskName(request.getCurrentTaskName())
+                .currentTasks(request.getCurrentTasks())
+                .taskApproved(request.getTaskApproved())
+                .taskApprovalResult(request.getTaskApprovalResult())
+                .currentApprovalResult(request.getCurrentApprovalResult())
+                .relatedFormData(request.getRelatedFormData())
+                .relatedFormId(request.getRelatedFormId())
+                .relatedFormName(request.getRelatedFormName())
+                .relatedForms(request.getRelatedForms())
+                .nextTaskId(request.getNextTaskId())
+                .nextTaskName(request.getNextTaskName())
+                .nextTasks(request.getNextTasks())
                 .processBeanName(processBeanName)
                 .eventType(request.getEventType())
                 .message(request.getMessage())
                 .eventTime(request.getEventTime())
-                .payload(request.getPayload())
                 .errorMessage(request.getErrorMessage())
                 .build();
         validateClientProcessBinding(event);
@@ -64,10 +77,6 @@ public class WcdkProcessCallbackServiceImpl implements WcdkProcessCallbackServic
         if (StringUtils.hasText(request.getProcessBeanName())) {
             return request.getProcessBeanName();
         }
-        String payloadProcessBeanName = getPayloadString(request.getPayload(), PROCESS_BEAN_NAME);
-        if (StringUtils.hasText(payloadProcessBeanName)) {
-            return payloadProcessBeanName;
-        }
         String processInstanceId = resolveProcessInstanceId(request);
         if (!StringUtils.hasText(processInstanceId)) {
             throw new IllegalArgumentException("流程回调时必须提供processBeanName或processInstanceId");
@@ -83,16 +92,12 @@ public class WcdkProcessCallbackServiceImpl implements WcdkProcessCallbackServic
         if (StringUtils.hasText(request.getProcessInstanceId())) {
             return request.getProcessInstanceId();
         }
-        return getPayloadString(request.getPayload(), "processInstanceId");
+        return null;
     }
 
     private String resolveProcessDefinitionId(WcdkProcessConnectionEvent request) {
         if (StringUtils.hasText(request.getProcessDefinitionId())) {
             return request.getProcessDefinitionId();
-        }
-        String payloadProcessDefinitionId = getPayloadString(request.getPayload(), "processDefinitionId");
-        if (StringUtils.hasText(payloadProcessDefinitionId)) {
-            return payloadProcessDefinitionId;
         }
         ProcessInstance processInstance = getProcessInstance(resolveProcessInstanceId(request));
         return processInstance == null ? null : processInstance.getProcessDefinitionId();
@@ -102,10 +107,6 @@ public class WcdkProcessCallbackServiceImpl implements WcdkProcessCallbackServic
         if (StringUtils.hasText(request.getBusinessKey())) {
             return request.getBusinessKey();
         }
-        String payloadBusinessKey = getPayloadString(request.getPayload(), "businessKey");
-        if (StringUtils.hasText(payloadBusinessKey)) {
-            return payloadBusinessKey;
-        }
         ProcessInstance processInstance = getProcessInstance(resolveProcessInstanceId(request));
         return processInstance == null ? null : processInstance.getBusinessKey();
     }
@@ -113,10 +114,6 @@ public class WcdkProcessCallbackServiceImpl implements WcdkProcessCallbackServic
     private String resolveProcessDefinitionKey(WcdkProcessConnectionEvent request) {
         if (StringUtils.hasText(request.getProcessDefinitionKey())) {
             return request.getProcessDefinitionKey();
-        }
-        String payloadProcessDefinitionKey = getPayloadString(request.getPayload(), "processDefinitionKey");
-        if (StringUtils.hasText(payloadProcessDefinitionKey)) {
-            return payloadProcessDefinitionKey;
         }
         ProcessInstance processInstance = getProcessInstance(resolveProcessInstanceId(request));
         return processInstance == null ? null : processInstance.getProcessDefinitionKey();
@@ -131,17 +128,4 @@ public class WcdkProcessCallbackServiceImpl implements WcdkProcessCallbackServic
                 .singleResult();
     }
 
-    private String getPayloadString(Map<String, Object> payload, String key) {
-        if (payload == null) {
-            return null;
-        }
-        Object value = payload.get(key);
-        if (value == null) {
-            return null;
-        }
-        String text = String.valueOf(value);
-        return StringUtils.hasText(text) ? text : null;
-    }
 }
-
-

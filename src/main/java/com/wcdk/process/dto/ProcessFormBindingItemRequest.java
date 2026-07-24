@@ -5,17 +5,20 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
+/**
+ * @auther WCDK
+ * @date 2026/7/22
+ * @version 1.0
+ **/
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ProcessRequestApproveRequest {
+public class ProcessFormBindingItemRequest {
 
-    private String taskId;
+    private String taskDefinitionKey;
 
-    private Boolean approved;
-
-    private String approvalAction;
-
-    private String comment;
+    private List<Long> formIds;
 }

@@ -175,7 +175,8 @@ window.RoleCenter = {
             return selectedNames.join("、");
         }
     },
-    mounted: function () {
+    mounted: async function () {
+        await this.$root.loadPermissionsOption();
         this.queryList();
     },
     methods: {

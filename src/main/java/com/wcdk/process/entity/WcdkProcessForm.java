@@ -12,28 +12,36 @@ import java.time.LocalDateTime;
 
 /**
  * @auther WCDK
- * @date 2026/7/16
+ * @date 2026/7/22
  * @version 1.0
  **/
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@TableName("WCDK_PROCESS_CLIENT")
-public class WcdkProcessClient {
+@TableName("WCDK_PROCESS_FORM")
+public class WcdkProcessForm {
 
     @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
-    private String clientId;
+    private String formKey;
 
-    private String clientName;
+    private String formName;
 
-    private String callbackUrl;
+    private Integer formVersion;
 
-    private String serviceName;
+    private String formSchemaJson;
 
-    private String authFlg;
+    private String resourceName;
+
+    private String tenantId;
+
+    private Integer status;
+
+    private String remark;
+
+    private String createUser;
 
     private LocalDateTime createTime;
 

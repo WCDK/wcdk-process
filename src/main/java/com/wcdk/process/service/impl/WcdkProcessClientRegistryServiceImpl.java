@@ -3,6 +3,7 @@ package com.wcdk.process.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.wcdk.process.common.PageResponse;
+import com.wcdk.process.config.WcdkProcessNacosProperties;
 import com.wcdk.process.dto.WcdkProcessClientDefinition;
 import com.wcdk.process.dto.WcdkProcessClientRegisterRequest;
 import com.wcdk.process.dto.WcdkProcessClientResponse;
@@ -15,6 +16,8 @@ import com.wcdk.process.service.WcdkProcessClientRegistryService;
 import com.wcdk.process.service.WcdkProcessClientCallbackService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cloud.client.ServiceInstance;
+import org.springframework.cloud.client.loadbalancer.LoadBalancerClient;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -53,6 +56,10 @@ public class WcdkProcessClientRegistryServiceImpl implements WcdkProcessClientRe
 
     private final ObjectProvider<WcdkProcessClientCallbackService> wcdkProcessClientCallbackServiceProvider;
 
+    private final ObjectProvider<LoadBalancerClient> loadBalancerClientProvider;
+
+    private final WcdkProcessNacosProperties wcdkProcessNacosProperties;
+
     private final RestClient restClient = RestClient.builder()
             .requestFactory(buildRequestFactory())
             .build();
@@ -69,7 +76,7 @@ public class WcdkProcessClientRegistryServiceImpl implements WcdkProcessClientRe
         if (!StringUtils.hasText(request.getClientName())) {
             throw new IllegalArgumentException("客户端名称不能为空");
         }
-        if (!StringUtils.hasText(request.getCallbackUrl())) {
+        if (!StringUtils.hasText(request.getCallbackUrl()) && !StringUtils.hasText(request.getServiceName())) {
             throw new IllegalArgumentException("客户端回调地址不能为空");
         }
         String clientId = request.getClientId().trim();
@@ -85,7 +92,8 @@ public class WcdkProcessClientRegistryServiceImpl implements WcdkProcessClientRe
                     .build();
         }
         client.setClientName(request.getClientName().trim());
-        client.setCallbackUrl(request.getCallbackUrl().trim());
+        client.setCallbackUrl(StringUtils.hasText(request.getCallbackUrl()) ? request.getCallbackUrl().trim() : null);
+        client.setServiceName(StringUtils.hasText(request.getServiceName()) ? request.getServiceName().trim() : null);
         client.setAuthFlg(request.getAuthFlg());
         client.setUpdateTime(now);
         if (client.getId() == null) {
@@ -282,7 +290,7 @@ public class WcdkProcessClientRegistryServiceImpl implements WcdkProcessClientRe
     @Override
     public boolean detectClient(String clientId) {
         WcdkProcessClient client = getRequiredClient(clientId);
-        String callbackUrl = buildRegisterCallbackUrl(client.getCallbackUrl());
+        String callbackUrl = buildRegisterCallbackUrl(client.getServiceName(), client.getCallbackUrl());
         WcdkProcessConnectionEvent event = WcdkProcessConnectionEvent.builder()
                 .clientId(client.getClientId())
                 .clientName(client.getClientName())
@@ -338,6 +346,7 @@ public class WcdkProcessClientRegistryServiceImpl implements WcdkProcessClientRe
                 .clientId(client.getClientId())
                 .clientName(client.getClientName())
                 .callbackUrl(client.getCallbackUrl())
+                .serviceName(client.getServiceName())
                 .callbackHeaders(readHeaders(client.getAuthFlg()))
                 .processBeanNames(processBeanNames == null ? Set.of() : processBeanNames)
                 .build();
@@ -367,7 +376,7 @@ public class WcdkProcessClientRegistryServiceImpl implements WcdkProcessClientRe
         if (!StringUtils.hasText(callbackUrl)) {
             throw new IllegalArgumentException("客户端回调地址不能为空");
         }
-        String normalizedUrl = callbackUrl.trim();
+        String normalizedUrl = resolveCallbackBaseUrl(null, callbackUrl);
         while (normalizedUrl.endsWith("/")) {
             normalizedUrl = normalizedUrl.substring(0, normalizedUrl.length() - 1);
         }
@@ -375,6 +384,40 @@ public class WcdkProcessClientRegistryServiceImpl implements WcdkProcessClientRe
             return normalizedUrl;
         }
         return normalizedUrl + REGISTER_CALLBACK_PATH;
+    }
+
+    private String buildRegisterCallbackUrl(String serviceName, String callbackUrl) {
+        String normalizedUrl = resolveCallbackBaseUrl(serviceName, callbackUrl);
+        if (normalizedUrl.endsWith(REGISTER_CALLBACK_PATH)) {
+            return normalizedUrl;
+        }
+        return normalizedUrl + REGISTER_CALLBACK_PATH;
+    }
+
+    private String resolveCallbackBaseUrl(String serviceName, String callbackUrl) {
+        if (Boolean.TRUE.equals(wcdkProcessNacosProperties.getEnabled()) && StringUtils.hasText(serviceName)) {
+            LoadBalancerClient loadBalancerClient = loadBalancerClientProvider.getIfAvailable();
+            if (loadBalancerClient == null) {
+                throw new IllegalStateException("已开启Nacos服务名回调，但未找到LoadBalancerClient");
+            }
+            ServiceInstance serviceInstance = loadBalancerClient.choose(serviceName.trim());
+            if (serviceInstance == null) {
+                throw new IllegalStateException("未从注册中心找到服务实例：" + serviceName.trim());
+            }
+            return trimTrailingSlash(serviceInstance.getUri().toString());
+        }
+        if (!StringUtils.hasText(callbackUrl)) {
+            throw new IllegalArgumentException("客户端回调地址不能为空");
+        }
+        return trimTrailingSlash(callbackUrl);
+    }
+
+    private String trimTrailingSlash(String value) {
+        String normalizedUrl = value.trim();
+        while (normalizedUrl.endsWith("/")) {
+            normalizedUrl = normalizedUrl.substring(0, normalizedUrl.length() - 1);
+        }
+        return normalizedUrl;
     }
 
     private Set<String> resolveClientIdsByProcessBeanName(String processBeanName) {
@@ -436,6 +479,7 @@ public class WcdkProcessClientRegistryServiceImpl implements WcdkProcessClientRe
                 .clientId(client.getClientId())
                 .clientName(client.getClientName())
                 .callbackUrl(client.getCallbackUrl())
+                .serviceName(client.getServiceName())
                 .authFlg(client.getAuthFlg())
                 .clientStatus("未检测")
                 .processBeanNames(processBeanNames)

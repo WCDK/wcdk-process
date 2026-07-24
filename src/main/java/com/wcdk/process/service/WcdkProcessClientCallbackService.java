@@ -2,6 +2,9 @@ package com.wcdk.process.service;
 
 import com.wcdk.process.dto.WcdkProcessClientRegisterRequest;
 import com.wcdk.process.dto.WcdkProcessConnectionEvent;
+import com.wcdk.process.dto.WcdkProcessRpcCallbackResponse;
+
+import java.util.List;
 
 /**
  * @auther WCDK
@@ -12,6 +15,7 @@ public interface WcdkProcessClientCallbackService {
 
     void callback(WcdkProcessConnectionEvent event);
 
+    List<WcdkProcessRpcCallbackResponse> rpcCallback(WcdkProcessConnectionEvent event);
+
     void notifyRegisterSuccess(WcdkProcessClientRegisterRequest request);
 }
-

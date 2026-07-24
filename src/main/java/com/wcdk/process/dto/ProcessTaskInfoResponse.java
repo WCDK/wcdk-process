@@ -1,26 +1,26 @@
 package com.wcdk.process.dto;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
-
-import java.util.List;
+import lombok.NoArgsConstructor;
 
 /**
  * @auther WCDK
- * @date 2026/7/10
+ * @date 2026/7/23
  * @version 1.0
  **/
 @Data
 @Builder
-public class TaskResponse {
+@NoArgsConstructor
+@AllArgsConstructor
+public class ProcessTaskInfoResponse {
 
     private String taskId;
 
+    private String taskDefinitionKey;
+
     private String taskName;
-
-    private String currentTaskName;
-
-    private List<ProcessTaskInfoResponse> parallelTasks;
 
     private String assignee;
 

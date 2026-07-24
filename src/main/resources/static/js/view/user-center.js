@@ -106,7 +106,13 @@ window.UserCenter = {
             form: { username: "", realName: "", password: "", deptId: "", mobile: "", email: "", status: 1, roleIds: [] }
         };
     },
-    mounted: function () { this.queryList(); },
+    mounted: async function () {
+        await Promise.all([
+            this.$root.loadDeptsOption(),
+            this.$root.loadRolesOption()
+        ]);
+        this.queryList();
+    },
     methods: {
         queryList: async function () {
             var query = "?pageNum=" + this.pageNum + "&pageSize=" + this.pageSize;

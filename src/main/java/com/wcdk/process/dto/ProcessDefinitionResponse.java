@@ -30,6 +30,8 @@ public class ProcessDefinitionResponse {
 
     private Boolean suspended;
 
+    private Integer invalidStatus;
+
     private List<String> clientIds;
 
     private List<String> clientNames;

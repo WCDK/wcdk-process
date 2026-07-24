@@ -41,7 +41,10 @@ window.DeptCenter = {
     data: function () {
         return { filters: { deptName: "", status: "" }, records: [], total: 0, pageNum: 1, pageSize: 10, dialogVisible: false, editingId: null, form: { deptCode: "", deptName: "", parentId: "", sortNo: 0, status: 1, remark: "" } };
     },
-    mounted: function () { this.queryList(); },
+    mounted: async function () {
+        await this.$root.loadDeptsOption();
+        this.queryList();
+    },
     methods: {
         queryList: async function () {
             var query = "?pageNum=" + this.pageNum + "&pageSize=" + this.pageSize;

@@ -15,7 +15,7 @@ window.DeployCenter = {
                     <el-button v-if="$root.hasButton('deploy:refresh')" @click="handleRefresh">刷新</el-button>
                 </div>
 
-                <el-tabs v-model="activeTab" class="center-tabs">
+                <el-tabs v-model="activeTab" class="center-tabs" @tab-click="handleTabClick">
                     <el-tab-pane v-if="$root.hasTab('deploy:tab:create')" label="创建部署" name="create">
                         <el-form label-position="top" @submit.native.prevent="submitDeployment">
                             <div class="form-grid">
@@ -150,6 +150,13 @@ window.DeployCenter = {
                                 <el-table-column label="绑定处理器" min-width="180">
                                     <template slot-scope="scope">
                                         {{ formatListText(scope.row.processBeanNames) }}
+                                    </template>
+                                </el-table-column>
+                                <el-table-column label="作废状态" min-width="120">
+                                    <template slot-scope="scope">
+                                        <el-tag :type="resolveInvalidStatusType(scope.row.invalidStatus)" effect="plain">
+                                            {{ resolveInvalidStatusLabel(scope.row.invalidStatus) }}
+                                        </el-tag>
                                     </template>
                                 </el-table-column>
                                 <el-table-column prop="deployTime" label="部署时间" min-width="180" sortable="custom">
@@ -342,7 +349,13 @@ window.DeployCenter = {
                                         <el-tag size="mini" :type="resolveNodeTagType(node.elementType)" effect="plain">
                                             {{ resolveNodeTypeLabel(node.elementType) }}
                                         </el-tag>
+                                        <el-tag v-if="resolveNodeBoundFormCount(node)" size="mini" type="success" effect="plain">
+                                            已绑 {{ resolveNodeBoundFormCount(node) }} 个表单
+                                        </el-tag>
                                         <span>入口 {{ node.incomingCount || 0 }} / 出口 {{ node.outgoingCount || 0 }}</span>
+                                    </div>
+                                    <div class="helper-text" v-if="resolveNodeBoundFormTitle(node)">
+                                        {{ resolveNodeBoundFormTitle(node) }}
                                     </div>
                                     <div class="helper-text" v-if="node.documentation">{{ node.documentation }}</div>
                                 </div>
@@ -363,6 +376,7 @@ window.DeployCenter = {
     data: function () {
         return {
             activeTab: "create",
+            listLoaded: false,
             form: {
                 deploymentName: "",
                 category: "",
@@ -474,6 +488,12 @@ window.DeployCenter = {
                 return !!value;
             });
             return list.length ? list.join("、") : "-";
+        },
+        resolveInvalidStatusLabel: function (invalidStatus) {
+            return Number(invalidStatus || 0) === 1 ? "已作废" : "生效";
+        },
+        resolveInvalidStatusType: function (invalidStatus) {
+            return Number(invalidStatus || 0) === 1 ? "info" : "success";
         },
         resolveDeploymentDefinitions: function (deploymentId) {
             if (!deploymentId) {
@@ -720,9 +740,17 @@ window.DeployCenter = {
             }).catch(function () {});
         },
         handleStartApproval: function (row) {
+            if (Number(row && row.invalidStatus || 0) === 1) {
+                this.$root.showError("当前流程已作废，不能发起审批");
+                return;
+            }
             var targetDefinition = this.resolveLatestDefinition(row);
             if (!targetDefinition || !targetDefinition.processDefinitionKey) {
                 this.$root.showError("未查询到可发起的流程定义");
+                return;
+            }
+            if (Number(targetDefinition.invalidStatus || 0) === 1) {
+                this.$root.showError("当前流程定义已作废，不能发起审批");
                 return;
             }
             this.$router.push({
@@ -747,6 +775,7 @@ window.DeployCenter = {
                 this.$root.loadDefinitions(),
                 this.loadClientOptions()
             ]);
+            this.listLoaded = true;
             this.selectFirstDeployment();
         },
         handleQuery: async function () {
@@ -755,6 +784,7 @@ window.DeployCenter = {
                 this.$root.loadDeployments(this.filters),
                 this.$root.loadDefinitions()
             ]);
+            this.listLoaded = true;
             this.selectFirstFromFiltered();
         },
         handleResetQuery: async function () {
@@ -768,7 +798,20 @@ window.DeployCenter = {
                 this.$root.loadDeployments(this.filters),
                 this.$root.loadDefinitions()
             ]);
+            this.listLoaded = true;
             this.selectFirstDeployment();
+        },
+        handleTabClick: async function () {
+            if (this.activeTab === "list" && !this.listLoaded) {
+                await Promise.all([
+                    this.$root.loadDeployments(this.filters),
+                    this.$root.loadDefinitions(),
+                    this.$root.loadModels(),
+                    this.loadClientOptions()
+                ]);
+                this.listLoaded = true;
+                this.selectFirstDeployment();
+            }
         },
         handlePageChange: function (pageNum) {
             this.pageNum = pageNum;
@@ -799,6 +842,7 @@ window.DeployCenter = {
             this.$router.push({
                 path: "/designer",
                 query: {
+                    flg: "update",
                     deploymentId: targetDeploymentId,
                     processDefinitionId: targetDefinition.processDefinitionId || ""
                 }
@@ -826,11 +870,86 @@ window.DeployCenter = {
         loadPreviewDetail: async function (processDefinitionId) {
             try {
                 this.previewDetail = await this.$root.fetchProcessDefinitionDetail(processDefinitionId);
+                await this.loadPreviewFormBindings(processDefinitionId);
                 this.$nextTick(this.renderPreviewCanvas);
             } catch (error) {
                 this.previewDetail = null;
                 this.$root.showError(error.message || "Failed to load process preview");
             }
+        },
+        loadPreviewFormBindings: async function (processDefinitionId) {
+            if (!processDefinitionId || !this.previewDetail || !Array.isArray(this.previewDetail.nodes)) {
+                return;
+            }
+            var result = await window.AppService.request("/process/form/binding/" + encodeURIComponent(processDefinitionId));
+            this.applyPreviewFormBindings(result.data || []);
+        },
+        applyPreviewFormBindings: function (records) {
+            if (!this.previewDetail || !Array.isArray(this.previewDetail.nodes)) {
+                return;
+            }
+            var bindingMap = {};
+            for (var index = 0; index < (records || []).length; index += 1) {
+                var record = records[index] || {};
+                var nodeId = String(record.processNodeId || record.processNode || "").trim();
+                if (!nodeId || !record.formKey) {
+                    continue;
+                }
+                if (!bindingMap[nodeId]) {
+                    bindingMap[nodeId] = [];
+                }
+                bindingMap[nodeId].push(record);
+            }
+            for (var nodeIndex = 0; nodeIndex < this.previewDetail.nodes.length; nodeIndex += 1) {
+                var node = this.previewDetail.nodes[nodeIndex];
+                var forms = this.normalizePreviewBoundForms(bindingMap[node.elementId] || []);
+                this.$set(node, "boundForms", forms);
+                this.$set(node, "boundFormKeys", forms.map(function (form) {
+                    return form.formKey;
+                }));
+                this.$set(node, "formKey", forms.map(function (form) {
+                    return form.formKey;
+                }).join(","));
+            }
+        },
+        normalizePreviewBoundForms: function (records) {
+            var results = [];
+            var usedKeys = {};
+            for (var index = 0; index < (records || []).length; index += 1) {
+                var record = records[index] || {};
+                var formKey = String(record.formKey || "").trim();
+                if (!formKey || usedKeys[formKey]) {
+                    continue;
+                }
+                usedKeys[formKey] = true;
+                results.push({
+                    id: record.id || "",
+                    formKey: formKey,
+                    formName: record.formName || formKey,
+                    formVersion: record.formVersion || "",
+                    fieldCount: record.fieldCount || 0,
+                    schema: Array.isArray(record.schema) ? record.schema : []
+                });
+            }
+            return results;
+        },
+        resolveNodeBoundFormCount: function (node) {
+            return this.resolveNodeBoundForms(node).length;
+        },
+        resolveNodeBoundFormTitle: function (node) {
+            var forms = this.resolveNodeBoundForms(node);
+            if (!forms.length) {
+                return "";
+            }
+            return "已绑定表单：" + forms.map(function (form) {
+                return (form.formName || form.formKey) + "（" + form.formKey + "）";
+            }).join("、");
+        },
+        resolveNodeBoundForms: function (node) {
+            if (!node || node.elementType !== "UserTask") {
+                return [];
+            }
+            return this.normalizePreviewBoundForms(node.boundForms || []);
         },
         findDefinitionsByDeploymentId: function (deploymentId) {
             if (!deploymentId) {
@@ -1097,13 +1216,7 @@ window.DeployCenter = {
         }
     },
     mounted: async function () {
-        await Promise.all([
-            this.$root.loadDeployments(this.filters),
-            this.$root.loadDefinitions(),
-            this.$root.loadModels(),
-            this.loadClientOptions()
-        ]);
-        this.selectFirstDeployment();
+        await this.loadClientOptions();
     },
     watch: {
         "$root.deployments": function () {

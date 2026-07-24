@@ -1,12 +1,19 @@
 package com.wcdk.process.service.impl;
 
+import com.wcdk.process.common.ApiResponse;
+import com.wcdk.process.config.WcdkProcessNacosProperties;
 import com.wcdk.process.dto.WcdkProcessClientDefinition;
 import com.wcdk.process.dto.WcdkProcessConnectionEvent;
 import com.wcdk.process.dto.WcdkProcessClientRegisterRequest;
+import com.wcdk.process.dto.WcdkProcessRpcCallbackResponse;
 import com.wcdk.process.service.WcdkProcessClientRegistryService;
 import com.wcdk.process.service.WcdkProcessClientCallbackService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.cloud.client.ServiceInstance;
+import org.springframework.cloud.client.loadbalancer.LoadBalancerClient;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -15,6 +22,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.util.ArrayList;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -35,7 +43,14 @@ public class WcdkProcessClientCallbackServiceImpl implements WcdkProcessClientCa
 
     private static final Duration CALLBACK_TIMEOUT = Duration.ofSeconds(5);
 
+    private static final ParameterizedTypeReference<ApiResponse<Object>> RPC_RESPONSE_TYPE = new ParameterizedTypeReference<>() {
+    };
+
     private final WcdkProcessClientRegistryService wcdkProcessClientRegistryService;
+
+    private final ObjectProvider<LoadBalancerClient> loadBalancerClientProvider;
+
+    private final WcdkProcessNacosProperties wcdkProcessNacosProperties;
 
     private final RestClient restClient = RestClient.builder()
             .requestFactory(buildRequestFactory())
@@ -53,13 +68,7 @@ public class WcdkProcessClientCallbackServiceImpl implements WcdkProcessClientCa
         }
         for (WcdkProcessClientDefinition clientDefinition : clientDefinitions) {
             try {
-                restClient.post()
-                        .uri(clientDefinition.getCallbackUrl()+"/wcdk_process/"+event.getProcessBeanName())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .headers(headers -> applyHeaders(headers, clientDefinition))
-                        .body(fillClientInfo(event, clientDefinition))
-                        .retrieve()
-                        .toBodilessEntity();
+                invokeClient(clientDefinition, event);
             } catch (RestClientResponseException exception) {
                 log.warn("流程回调客户端失败，clientId={}, callbackUrl={}, statusCode={}, responseBody={}",
                         clientDefinition.getClientId(), clientDefinition.getCallbackUrl(),
@@ -71,11 +80,46 @@ public class WcdkProcessClientCallbackServiceImpl implements WcdkProcessClientCa
     }
 
     @Override
+    public List<WcdkProcessRpcCallbackResponse> rpcCallback(WcdkProcessConnectionEvent event) {
+        if (event == null || !StringUtils.hasText(event.getProcessDefinitionId())) {
+            throw new IllegalArgumentException("RPC回调必须提供流程定义ID");
+        }
+        List<WcdkProcessClientDefinition> clientDefinitions = wcdkProcessClientRegistryService.listByProcessDefinitionId(event.getProcessDefinitionId());
+        if (clientDefinitions.isEmpty()) {
+            return List.of();
+        }
+        List<WcdkProcessRpcCallbackResponse> responses = new ArrayList<>();
+        for (WcdkProcessClientDefinition clientDefinition : clientDefinitions) {
+            String processBeanName = resolveProcessBeanName(event, clientDefinition);
+            try {
+                ApiResponse<Object> response = invokeClient(clientDefinition, event);
+                responses.add(WcdkProcessRpcCallbackResponse.builder()
+                        .clientId(clientDefinition.getClientId())
+                        .clientName(clientDefinition.getClientName())
+                        .processBeanName(processBeanName)
+                        .success(response != null && response.getCode() != null && response.getCode() == 200)
+                        .data(response == null ? null : response.getData())
+                        .message(response == null ? "客户端未返回内容" : response.getMessage())
+                        .build());
+            } catch (RestClientResponseException exception) {
+                log.warn("RPC回调客户端失败，clientId={}, callbackUrl={}, statusCode={}, responseBody={}",
+                        clientDefinition.getClientId(), clientDefinition.getCallbackUrl(),
+                        exception.getStatusCode(), exception.getResponseBodyAsString(), exception);
+                responses.add(buildFailedRpcResponse(clientDefinition, processBeanName, exception.getResponseBodyAsString()));
+            } catch (Exception exception) {
+                log.warn("RPC回调客户端失败，clientId={}, callbackUrl={}", clientDefinition.getClientId(), clientDefinition.getCallbackUrl(), exception);
+                responses.add(buildFailedRpcResponse(clientDefinition, processBeanName, exception.getMessage()));
+            }
+        }
+        return responses;
+    }
+
+    @Override
     public void notifyRegisterSuccess(WcdkProcessClientRegisterRequest request) {
-        if (request == null || !StringUtils.hasText(request.getCallbackUrl())) {
+        if (request == null || (!StringUtils.hasText(request.getCallbackUrl()) && !StringUtils.hasText(request.getServiceName()))) {
             return;
         }
-        String callbackUrl = buildRegisterCallbackUrl(request.getCallbackUrl());
+        String callbackUrl = buildRegisterCallbackUrl(request);
         WcdkProcessConnectionEvent event = WcdkProcessConnectionEvent.builder()
                 .clientId(request.getClientId())
                 .clientName(request.getClientName())
@@ -129,11 +173,8 @@ public class WcdkProcessClientCallbackServiceImpl implements WcdkProcessClientCa
         return headers;
     }
 
-    private String buildRegisterCallbackUrl(String callbackUrl) {
-        String normalizedUrl = callbackUrl.trim();
-        while (normalizedUrl.endsWith("/")) {
-            normalizedUrl = normalizedUrl.substring(0, normalizedUrl.length() - 1);
-        }
+    private String buildRegisterCallbackUrl(WcdkProcessClientRegisterRequest request) {
+        String normalizedUrl = resolveCallbackBaseUrl(request.getServiceName(), request.getCallbackUrl());
         if (normalizedUrl.endsWith(REGISTER_CALLBACK_PATH)) {
             return normalizedUrl;
         }
@@ -142,10 +183,6 @@ public class WcdkProcessClientCallbackServiceImpl implements WcdkProcessClientCa
 
     private WcdkProcessConnectionEvent fillClientInfo(WcdkProcessConnectionEvent source, WcdkProcessClientDefinition clientDefinition) {
         String processBeanName = resolveProcessBeanName(source, clientDefinition);
-        Map<String, Object> payload = source.getPayload() == null ? new LinkedHashMap<>() : new LinkedHashMap<>(source.getPayload());
-        if (StringUtils.hasText(processBeanName)) {
-            payload.put("processBeanName", processBeanName);
-        }
         return WcdkProcessConnectionEvent.builder()
                 .connectionId(source.getConnectionId())
                 .clientId(clientDefinition.getClientId())
@@ -153,13 +190,89 @@ public class WcdkProcessClientCallbackServiceImpl implements WcdkProcessClientCa
                 .processInstanceId(source.getProcessInstanceId())
                 .processDefinitionId(source.getProcessDefinitionId())
                 .processDefinitionKey(source.getProcessDefinitionKey())
+                .processDefinitionName(source.getProcessDefinitionName())
                 .businessKey(source.getBusinessKey())
+                .approvalId(source.getApprovalId())
+                .approvalName(source.getApprovalName())
+                .currentTaskId(source.getCurrentTaskId())
+                .currentTaskName(source.getCurrentTaskName())
+                .currentTasks(source.getCurrentTasks())
+                .taskApproved(source.getTaskApproved())
+                .taskApprovalResult(source.getTaskApprovalResult())
+                .currentApprovalResult(source.getCurrentApprovalResult())
+                .relatedFormData(source.getRelatedFormData())
+                .relatedFormId(source.getRelatedFormId())
+                .relatedFormName(source.getRelatedFormName())
+                .relatedForms(source.getRelatedForms())
+                .nextTaskId(source.getNextTaskId())
+                .nextTaskName(source.getNextTaskName())
+                .nextTasks(source.getNextTasks())
                 .processBeanName(processBeanName)
                 .eventType(source.getEventType())
                 .message(source.getMessage())
                 .eventTime(source.getEventTime() == null ? LocalDateTime.now() : source.getEventTime())
-                .payload(payload)
                 .errorMessage(source.getErrorMessage())
+                .build();
+    }
+
+    private ApiResponse<Object> invokeClient(WcdkProcessClientDefinition clientDefinition, WcdkProcessConnectionEvent event) {
+        String processBeanName = resolveProcessBeanName(event, clientDefinition);
+        if (!StringUtils.hasText(processBeanName)) {
+            throw new IllegalArgumentException("流程处理器不能为空");
+        }
+        return restClient.post()
+                .uri(buildProcessBeanCallbackUrl(clientDefinition.getServiceName(), clientDefinition.getCallbackUrl(), processBeanName))
+                .contentType(MediaType.APPLICATION_JSON)
+                .headers(headers -> applyHeaders(headers, clientDefinition))
+                .body(fillClientInfo(event, clientDefinition))
+                .retrieve()
+                .body(RPC_RESPONSE_TYPE);
+    }
+
+    private String buildProcessBeanCallbackUrl(String callbackUrl, String processBeanName) {
+        return buildProcessBeanCallbackUrl(null, callbackUrl, processBeanName);
+    }
+
+    private String buildProcessBeanCallbackUrl(String serviceName, String callbackUrl, String processBeanName) {
+        String normalizedUrl = resolveCallbackBaseUrl(serviceName, callbackUrl);
+        return normalizedUrl + "/wcdk_process/" + processBeanName.trim();
+    }
+
+    private String resolveCallbackBaseUrl(String serviceName, String callbackUrl) {
+        if (Boolean.TRUE.equals(wcdkProcessNacosProperties.getEnabled()) && StringUtils.hasText(serviceName)) {
+            LoadBalancerClient loadBalancerClient = loadBalancerClientProvider.getIfAvailable();
+            if (loadBalancerClient == null) {
+                throw new IllegalStateException("已开启Nacos服务名回调，但未找到LoadBalancerClient");
+            }
+            ServiceInstance serviceInstance = loadBalancerClient.choose(serviceName.trim());
+            if (serviceInstance == null) {
+                throw new IllegalStateException("未从注册中心找到服务实例：" + serviceName.trim());
+            }
+            return trimTrailingSlash(serviceInstance.getUri().toString());
+        }
+        if (!StringUtils.hasText(callbackUrl)) {
+            throw new IllegalArgumentException("客户端回调地址不能为空");
+        }
+        return trimTrailingSlash(callbackUrl);
+    }
+
+    private String trimTrailingSlash(String value) {
+        String normalizedUrl = value.trim();
+        while (normalizedUrl.endsWith("/")) {
+            normalizedUrl = normalizedUrl.substring(0, normalizedUrl.length() - 1);
+        }
+        return normalizedUrl;
+    }
+
+    private WcdkProcessRpcCallbackResponse buildFailedRpcResponse(WcdkProcessClientDefinition clientDefinition,
+                                                                  String processBeanName,
+                                                                  String message) {
+        return WcdkProcessRpcCallbackResponse.builder()
+                .clientId(clientDefinition.getClientId())
+                .clientName(clientDefinition.getClientName())
+                .processBeanName(processBeanName)
+                .success(false)
+                .message(StringUtils.hasText(message) ? message : "RPC回调客户端失败")
                 .build();
     }
 
