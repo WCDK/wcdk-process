@@ -200,6 +200,7 @@ public class WcdkProcessClientCallbackServiceImpl implements WcdkProcessClientCa
                 .taskApproved(source.getTaskApproved())
                 .taskApprovalResult(source.getTaskApprovalResult())
                 .currentApprovalResult(source.getCurrentApprovalResult())
+                .approvalFormData(source.getApprovalFormData())
                 .relatedFormData(source.getRelatedFormData())
                 .relatedFormId(source.getRelatedFormId())
                 .relatedFormName(source.getRelatedFormName())

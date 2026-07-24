@@ -100,6 +100,11 @@ public class WcdkProcessConnectionEvent {
     private Integer currentApprovalResult;
 
     /**
+     * 本次审批提交的表单数据。
+     */
+    private Map<String, Object> approvalFormData;
+
+    /**
      * 关联表单数据。
      */
     private Map<String, Object> relatedFormData;

@@ -72,6 +72,8 @@ public class ProcessRequestServiceImpl extends ServiceImpl<ProcessRequestMapper,
 
     private static final String APPROVAL_COMMENT_VARIABLE_NAME = "nodeApprovalComment";
 
+    private static final String APPROVAL_FORM_DATA_VARIABLE_NAME = "approvalFormData";
+
     private static final String PROCESS_BEAN_NAME = "processBeanName";
 
     private static final String USER_TASK_ACTIVITY_TYPE = "userTask";
@@ -250,9 +252,15 @@ public class ProcessRequestServiceImpl extends ServiceImpl<ProcessRequestMapper,
         ProcessRequest processRequest = getProcessRequestByProcessInstanceId(task.getProcessInstanceId());
         List<ProcessTaskInfoResponse> currentTasks = buildTaskInfoResponses(listActiveTasks(task.getProcessInstanceId()), processRequest.getId());
         validateTaskNotPrematureParallelJoin(task, currentTasks);
+        Map<String, Object> approvalFormData = normalizeFormData(request.getFormData());
+        mergeApprovalFormData(processRequest, approvalFormData);
         Map<String, Object> variables = new HashMap<>();
         variables.put(APPROVED_VARIABLE_NAME, request.getApproved());
         variables.put("comment", request.getComment());
+        variables.putAll(approvalFormData);
+        if (!approvalFormData.isEmpty()) {
+            variables.put(APPROVAL_FORM_DATA_VARIABLE_NAME, approvalFormData);
+        }
         recordTaskApprovalVariables(task, request);
         log.info("处理流程审批任务，taskId={}, approved={}", request.getTaskId(), request.getApproved());
         if (isRejectAction(request)) {
@@ -270,7 +278,8 @@ public class ProcessRequestServiceImpl extends ServiceImpl<ProcessRequestMapper,
                 task,
                 request.getApproved(),
                 request.getApprovalAction(),
-                currentTasks);
+                currentTasks,
+                approvalFormData);
     }
 
     @Override
@@ -888,6 +897,17 @@ public class ProcessRequestServiceImpl extends ServiceImpl<ProcessRequestMapper,
         return normalized;
     }
 
+    private void mergeApprovalFormData(ProcessRequest processRequest, Map<String, Object> approvalFormData) {
+        if (processRequest == null || approvalFormData == null || approvalFormData.isEmpty()) {
+            return;
+        }
+        Map<String, Object> formData = parseFormData(processRequest.getFormDataJson());
+        formData.putAll(approvalFormData);
+        processRequest.setFormDataJson(JSON.toJSONString(formData));
+        processRequest.setUpdateTime(LocalDateTime.now());
+        updateById(processRequest);
+    }
+
     private Map<String, Object> parseFormData(String formDataJson) {
         if (!StringUtils.hasText(formDataJson)) {
             return new LinkedHashMap<>();
@@ -921,11 +941,12 @@ public class ProcessRequestServiceImpl extends ServiceImpl<ProcessRequestMapper,
     }
 
     private void notifyProcessCallback(ProcessRequest processRequest, String eventType, String message) {
-        notifyProcessCallback(processRequest, eventType, message, null, null, null, null);
+        notifyProcessCallback(processRequest, eventType, message, null, null, null, null, Map.of());
     }
 
     private void notifyProcessCallback(ProcessRequest processRequest, String eventType, String message, Task completedTask, Boolean approved,
-                                       String approvalAction, List<ProcessTaskInfoResponse> currentTasks) {
+                                       String approvalAction, List<ProcessTaskInfoResponse> currentTasks,
+                                       Map<String, Object> approvalFormData) {
         String processBeanName = resolveProcessBeanName(processRequest);
         ProcessRequestResponse response = buildProcessRequestResponse(processRequest);
         if (!StringUtils.hasText(response.getProcessDefinitionId())) {
@@ -958,6 +979,7 @@ public class ProcessRequestServiceImpl extends ServiceImpl<ProcessRequestMapper,
                 .taskApproved(approved)
                 .taskApprovalResult(taskApprovalResult)
                 .currentApprovalResult(currentApprovalResult)
+                .approvalFormData(approvalFormData == null ? Map.of() : approvalFormData)
                 .relatedFormData(response.getFormData())
                 .relatedFormId(relatedFormId)
                 .relatedFormName(relatedFormName)

@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Map;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -18,4 +20,6 @@ public class ProcessRequestApproveRequest {
     private String approvalAction;
 
     private String comment;
+
+    private Map<String, Object> formData;
 }
