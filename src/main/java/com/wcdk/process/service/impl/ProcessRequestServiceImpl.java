@@ -1,11 +1,11 @@
 package com.wcdk.process.service.impl;
 
-import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.TypeReference;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.wcdk.process.common.PageResponse;
+import com.wcdk.process.common.json.JSON;
 import com.wcdk.process.constant.ProcessStatusConstant;
 import com.wcdk.process.dto.ProcessDefinitionDetailResponse;
 import com.wcdk.process.dto.ProcessDiagramNodeResponse;

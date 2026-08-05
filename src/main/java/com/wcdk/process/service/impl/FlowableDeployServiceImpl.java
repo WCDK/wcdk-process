@@ -1,9 +1,9 @@
 package com.wcdk.process.service.impl;
 
-import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONArray;
-import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.wcdk.process.common.json.JSON;
+import com.wcdk.process.common.json.JsonArray;
+import com.wcdk.process.common.json.JsonObject;
 import com.wcdk.process.dto.DeploymentResponse;
 import com.wcdk.process.dto.ProcessActionButtonResponse;
 import com.wcdk.process.dto.ProcessDefinitionDetailResponse;
@@ -1055,7 +1055,7 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
             if (!StringUtils.hasText(documentation)) {
                 continue;
             }
-            JSONObject schemaJson = parseDocumentationSchema(documentation);
+            JsonObject schemaJson = parseDocumentationSchema(documentation);
             if (schemaJson == null) {
                 continue;
             }
@@ -1072,14 +1072,14 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
         return null;
     }
 
-    private JSONObject parseDocumentationSchema(String documentation) {
+    private JsonObject parseDocumentationSchema(String documentation) {
         String trimmed = documentation == null ? null : documentation.trim();
         if (!StringUtils.hasText(trimmed) || (!trimmed.startsWith("{") && !trimmed.startsWith("["))) {
             return null;
         }
         try {
             if (trimmed.startsWith("[")) {
-                return new JSONObject(Map.of("formFields", JSON.parseArray(trimmed)));
+                return new JsonObject(Map.of("formFields", JSON.parseArray(trimmed)));
             }
             return JSON.parseObject(trimmed);
         } catch (Exception ex) {
@@ -1146,7 +1146,7 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
                 .build();
     }
 
-    private List<ProcessFormFieldResponse> parseFormFields(JSONArray formFields,
+    private List<ProcessFormFieldResponse> parseFormFields(JsonArray formFields,
                                                            Element ownerElement,
                                                            List<ProcessDiagramNodeResponse> nodes) {
         if (formFields == null || formFields.isEmpty()) {
@@ -1156,7 +1156,7 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
         String ownerNodeId = ownerElement == null ? null : resolveAttribute(ownerElement, "id");
         ProcessDiagramNodeResponse sourceNode = findNode(nodes, ownerNodeId);
         for (int index = 0; index < formFields.size(); index += 1) {
-            JSONObject field = formFields.getJSONObject(index);
+            JsonObject field = formFields.getJsonObject(index);
             if (field == null) {
                 continue;
             }
@@ -1195,7 +1195,7 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
         return results;
     }
 
-    private List<ProcessFormTableCellResponse> parseTableChildren(JSONArray children,
+    private List<ProcessFormTableCellResponse> parseTableChildren(JsonArray children,
                                                                   String ownerNodeId,
                                                                   ProcessDiagramNodeResponse sourceNode) {
         if (children == null || children.isEmpty()) {
@@ -1203,7 +1203,7 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
         }
         List<ProcessFormTableCellResponse> results = new ArrayList<>();
         for (int index = 0; index < children.size(); index += 1) {
-            JSONObject cell = children.getJSONObject(index);
+            JsonObject cell = children.getJsonObject(index);
             if (cell == null) {
                 continue;
             }
@@ -1216,7 +1216,7 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
         return results;
     }
 
-    private List<ProcessFormFieldResponse> parseTableCellFields(JSONArray fields,
+    private List<ProcessFormFieldResponse> parseTableCellFields(JsonArray fields,
                                                                 String ownerNodeId,
                                                                 ProcessDiagramNodeResponse sourceNode) {
         if (fields == null || fields.isEmpty()) {
@@ -1224,7 +1224,7 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
         }
         List<ProcessFormFieldResponse> results = new ArrayList<>();
         for (int index = 0; index < fields.size(); index += 1) {
-            JSONObject field = fields.getJSONObject(index);
+            JsonObject field = fields.getJsonObject(index);
             if (field == null) {
                 continue;
             }
@@ -1260,13 +1260,13 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
         return results;
     }
 
-    private List<ProcessActionButtonResponse> parseActionButtons(JSONArray buttons, List<ProcessDiagramNodeResponse> nodes) {
+    private List<ProcessActionButtonResponse> parseActionButtons(JsonArray buttons, List<ProcessDiagramNodeResponse> nodes) {
         if (buttons == null || buttons.isEmpty()) {
             return List.of();
         }
         List<ProcessActionButtonResponse> results = new ArrayList<>();
         for (int index = 0; index < buttons.size(); index += 1) {
-            JSONObject button = buttons.getJSONObject(index);
+            JsonObject button = buttons.getJsonObject(index);
             if (button == null) {
                 continue;
             }
@@ -1420,13 +1420,13 @@ public class FlowableDeployServiceImpl implements FlowableDeployService {
         return results;
     }
 
-    private List<ProcessFormOptionResponse> parseFieldOptions(JSONArray options) {
+    private List<ProcessFormOptionResponse> parseFieldOptions(JsonArray options) {
         if (options == null || options.isEmpty()) {
             return List.of();
         }
         List<ProcessFormOptionResponse> results = new ArrayList<>();
         for (int index = 0; index < options.size(); index += 1) {
-            JSONObject option = options.getJSONObject(index);
+            JsonObject option = options.getJSONObject(index);
             if (option == null) {
                 continue;
             }

@@ -1,7 +1,7 @@
 package com.wcdk.process.service.impl;
 
-import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONObject;
+import com.wcdk.process.common.json.JSON;
+import com.wcdk.process.common.json.JsonObject;
 import com.wcdk.process.dto.DeploymentResponse;
 import com.wcdk.process.dto.ModelCreateRequest;
 import com.wcdk.process.dto.ModelResponse;
@@ -273,7 +273,7 @@ public class FlowableModelServiceImpl implements FlowableModelService {
             return null;
         }
         try {
-            JSONObject jsonObject = JSON.parseObject(metaInfoText);
+            JsonObject jsonObject = JSON.parseObject(metaInfoText);
             return jsonObject == null ? null : jsonObject.getString(PROCESS_BEAN_NAME);
         } catch (Exception exception) {
             log.warn("解析流程模型元数据中processBean 失败", exception);

@@ -1,9 +1,9 @@
 package com.wcdk.process.service.impl;
 
-import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.wcdk.process.common.PageResponse;
+import com.wcdk.process.common.json.JSON;
 import com.wcdk.process.context.AuthContextHolder;
 import com.wcdk.process.context.AuthenticatedUser;
 import com.wcdk.process.dto.ProcessFormBindingItemRequest;
