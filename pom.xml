@@ -10,7 +10,7 @@
         <version>3.5.16</version>
         <relativePath/>
     </parent>
-
+    <groupId>com.wcdk.process</groupId>
     <artifactId>wcdk-process</artifactId>
     <name>wcdk-process</name>
     <description>WCDK-流程引擎</description>
