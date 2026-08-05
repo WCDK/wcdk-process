@@ -11,8 +11,8 @@ import org.springframework.stereotype.Component;
  **/
 @Data
 @Component
-@ConfigurationProperties(prefix = "wcdk.process.nacos")
+@ConfigurationProperties(prefix = "cloud.nacos")
 public class WcdkProcessNacosProperties {
 
-    private Boolean enabled = false;
+    private Boolean enable = false;
 }

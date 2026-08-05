@@ -240,7 +240,10 @@ public class WcdkProcessClientCallbackServiceImpl implements WcdkProcessClientCa
     }
 
     private String resolveCallbackBaseUrl(String serviceName, String callbackUrl) {
-        if (Boolean.TRUE.equals(wcdkProcessNacosProperties.getEnabled()) && StringUtils.hasText(serviceName)) {
+        if (Boolean.TRUE.equals(wcdkProcessNacosProperties.getEnable())) {
+            if (!StringUtils.hasText(serviceName)) {
+                throw new IllegalArgumentException("已开启Nacos RPC回调，客户端服务名不能为空");
+            }
             LoadBalancerClient loadBalancerClient = loadBalancerClientProvider.getIfAvailable();
             if (loadBalancerClient == null) {
                 throw new IllegalStateException("已开启Nacos服务名回调，但未找到LoadBalancerClient");

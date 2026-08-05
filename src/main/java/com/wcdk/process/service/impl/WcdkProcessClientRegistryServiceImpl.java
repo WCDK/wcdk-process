@@ -76,7 +76,8 @@ public class WcdkProcessClientRegistryServiceImpl implements WcdkProcessClientRe
         if (!StringUtils.hasText(request.getClientName())) {
             throw new IllegalArgumentException("客户端名称不能为空");
         }
-        if (!StringUtils.hasText(request.getCallbackUrl()) && !StringUtils.hasText(request.getServiceName())) {
+        if ((Boolean.TRUE.equals(wcdkProcessNacosProperties.getEnable()) && !StringUtils.hasText(request.getServiceName()))
+                || (!Boolean.TRUE.equals(wcdkProcessNacosProperties.getEnable()) && !StringUtils.hasText(request.getCallbackUrl()))) {
             throw new IllegalArgumentException("客户端回调地址不能为空");
         }
         String clientId = request.getClientId().trim();
@@ -395,7 +396,10 @@ public class WcdkProcessClientRegistryServiceImpl implements WcdkProcessClientRe
     }
 
     private String resolveCallbackBaseUrl(String serviceName, String callbackUrl) {
-        if (Boolean.TRUE.equals(wcdkProcessNacosProperties.getEnabled()) && StringUtils.hasText(serviceName)) {
+        if (Boolean.TRUE.equals(wcdkProcessNacosProperties.getEnable())) {
+            if (!StringUtils.hasText(serviceName)) {
+                throw new IllegalArgumentException("已开启Nacos RPC回调，客户端服务名不能为空");
+            }
             LoadBalancerClient loadBalancerClient = loadBalancerClientProvider.getIfAvailable();
             if (loadBalancerClient == null) {
                 throw new IllegalStateException("已开启Nacos服务名回调，但未找到LoadBalancerClient");
