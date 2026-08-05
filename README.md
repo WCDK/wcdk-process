@@ -11,6 +11,10 @@ ProcessDesignerView.vue 为vue引入使用案列
 外部嵌入预览插件 不支持预览表单，不支持自动获取关联表单 需要手动传参
 
 <img width="648" height="466" alt="image" src="https://github.com/user-attachments/assets/92790746-8d5d-4e10-b63e-30868ac0b891" />
+
+## 贡献
+
+欢迎提交 Issue 和 Pull Request！
 ## 联系方式
 
 - 作者：WCDK
