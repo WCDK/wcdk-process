@@ -5,6 +5,7 @@ import com.wcdk.process.repository.OutboxRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.scheduling.annotation.Scheduled;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -15,7 +16,7 @@ import java.time.Instant;
 @Component
 @RequiredArgsConstructor
 /**
- * WCDK 流程模块类型。
+ * WCDK 濞翠胶鈻煎Ο鈥虫健缁鐎烽妴?
  *
  * @author WCDK
  * @version 1.0
@@ -37,9 +38,12 @@ public class OutboxWorker {
                 });
     }
 
+    @Scheduled(fixedDelayString = "${wcdk.process.outbox.poll-delay-ms:5000}")
+    public void scheduledPoll() { pollAndProcess().subscribe(n -> { }, e -> log.error("Outbox polling failed", e)); }
+
     public Mono<Integer> pollAndProcess() {
-        return outboxRepository.findByStatus("PENDING")
-                .filter(entity -> entity.getRetryCount() < 3)
+        return Flux.concat(outboxRepository.findByStatus("PENDING"), outboxRepository.findByStatus("RETRY"))
+                .filter(entity -> (entity.getRetryCount() == null ? 0 : entity.getRetryCount()) < (entity.getMaxRetries() == null ? 3 : entity.getMaxRetries()))
                 .take(BATCH_SIZE)
                 .concatMap(this::processEvent)
                 .count()

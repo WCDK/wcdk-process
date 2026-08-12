@@ -1,0 +1,1 @@
+package com.wcdk.process.job;`r`n`r`nimport com.wcdk.process.entity.JobEntity;`r`nimport reactor.core.publisher.Mono;`r`n`r`n@FunctionalInterface`r`npublic interface JobHandler { Mono<Void> execute(JobEntity job); }

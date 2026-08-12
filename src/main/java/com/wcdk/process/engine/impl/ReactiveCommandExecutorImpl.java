@@ -124,8 +124,8 @@ public class ReactiveCommandExecutorImpl implements ReactiveCommandExecutor {
             case EXCLUSIVE_GATEWAY -> "com.wcdk.process.behavior.impl.ExclusiveGatewayBehavior";
             case SUB_PROCESS -> "com.wcdk.process.behavior.impl.EmbeddedSubProcessBehavior";
             case BOUNDARY_EVENT -> "com.wcdk.process.behavior.impl.BoundaryEventBehavior";
-            case SERVICE_TASK -> "com.wcdk.process.behavior.impl.MultiInstanceBehavior";
-            case SCRIPT_TASK -> "com.wcdk.process.behavior.impl.MultiInstanceBehavior";
+            case SERVICE_TASK -> "com.wcdk.process.behavior.impl.ServiceTaskBehavior";
+            case SCRIPT_TASK -> "com.wcdk.process.behavior.impl.ScriptTaskBehavior";
             case CALL_ACTIVITY -> "com.wcdk.process.behavior.impl.CallActivityBehavior";
             case INCLUSIVE_GATEWAY -> "com.wcdk.process.behavior.impl.InclusiveGatewayBehavior";
             case PARALLEL_GATEWAY -> "com.wcdk.process.behavior.impl.ParallelGatewayBehavior";

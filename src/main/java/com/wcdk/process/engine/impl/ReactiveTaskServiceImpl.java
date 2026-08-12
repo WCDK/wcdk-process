@@ -44,7 +44,12 @@ public class ReactiveTaskServiceImpl implements ReactiveTaskService {
                     task.setState(TaskState.COMPLETED.name());
                     task.setCompleteTime(Instant.now());
                     task.setUpdatedAt(Instant.now());
-                    return taskRepository.updateById(task).thenReturn(task);
+                    return taskRepository.updateById(task)
+                            .then(Mono.defer(() -> {
+                                agenda.planCompleteTask(task.getExecutionId(), task.getId());
+                                return commandExecutor.flushAgenda();
+                            }))
+                            .thenReturn(task);
                 });
     }
 

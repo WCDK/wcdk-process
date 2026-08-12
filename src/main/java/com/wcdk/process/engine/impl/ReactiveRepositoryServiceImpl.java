@@ -38,12 +38,12 @@ public class ReactiveRepositoryServiceImpl implements ReactiveRepositoryService 
 
     @Override
     public Mono<ProcessDefinitionEntity> getLatestProcessDefinitionByKey(String tenantId, String key) {
-        return processDefinitionRepository.findByTenantIdAndKeyAndVersion(tenantId, key, null)
-                .switchIfEmpty(Mono.defer(() ->
-                        processDefinitionRepository.findByTenantIdAndKey(tenantId, key)
-                                .sort((a, b) -> Integer.compare(b.getVersion(), a.getVersion()))
-                                .next()
-                ));
+        return processDefinitionRepository.findByTenantIdAndKey(tenantId, key)
+                .filter(definition -> definition.getSuspended() == null || definition.getSuspended() == 0)
+                .sort((a, b) -> Integer.compare(
+                        b.getVersion() == null ? 0 : b.getVersion(),
+                        a.getVersion() == null ? 0 : a.getVersion()))
+                .next();
     }
 
     @Override
