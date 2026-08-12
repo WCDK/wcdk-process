@@ -1,192 +1,183 @@
 package com.wcdk.process.service.impl;
 
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.wcdk.process.common.PageResponse;
-import com.wcdk.process.dto.SysPermissionResponse;
+import com.wcdk.process.dto.PageResponse;
+import com.wcdk.process.dto.SysRoleRequest;
 import com.wcdk.process.dto.SysRoleResponse;
-import com.wcdk.process.dto.SysRoleSaveRequest;
-import com.wcdk.process.entity.SysRole;
-import com.wcdk.process.entity.SysRolePermission;
-import com.wcdk.process.entity.SysUserRole;
-import com.wcdk.process.mapper.SysRoleMapper;
-import com.wcdk.process.mapper.SysRolePermissionMapper;
-import com.wcdk.process.mapper.SysUserRoleMapper;
-import com.wcdk.process.service.SysPermissionService;
+import com.wcdk.process.entity.SysPermissionEntity;
+import com.wcdk.process.entity.SysRoleEntity;
+import com.wcdk.process.entity.SysRolePermissionEntity;
+import com.wcdk.process.repository.SysPermissionRepository;
+import com.wcdk.process.repository.SysRolePermissionRepository;
+import com.wcdk.process.repository.SysRoleRepository;
+import com.wcdk.process.repository.SysUserRoleRepository;
 import com.wcdk.process.service.SysRoleService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.util.Collections;
 import java.util.List;
+
 /**
+ * 角色管理服务实现。
+ *
  * @auther WCDK
- * @date 2026/7/15
+ * @date 2026/08/10
  * @version 1.0
- **/
+ */
 @Service
-public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> implements SysRoleService {
+@RequiredArgsConstructor
+/**
+ * WCDK 流程模块类型。
+ *
+ * @author WCDK
+ * @version 1.0
+ */
+public class SysRoleServiceImpl implements SysRoleService {
 
-    private final SysRolePermissionMapper sysRolePermissionMapper;
-    private final SysUserRoleMapper sysUserRoleMapper;
-    private final SysPermissionService sysPermissionService;
+    private final SysRoleRepository sysRoleRepository;
+    private final SysRolePermissionRepository sysRolePermissionRepository;
+    private final SysPermissionRepository sysPermissionRepository;
+    private final SysUserRoleRepository sysUserRoleRepository;
 
-    public SysRoleServiceImpl(SysRolePermissionMapper sysRolePermissionMapper,
-                              SysUserRoleMapper sysUserRoleMapper,
-                              SysPermissionService sysPermissionService) {
-        this.sysRolePermissionMapper = sysRolePermissionMapper;
-        this.sysUserRoleMapper = sysUserRoleMapper;
-        this.sysPermissionService = sysPermissionService;
+    @Override
+    public Mono<PageResponse<SysRoleResponse>> list(
+            Integer pageNum, Integer pageSize, String roleName, Integer status) {
+        int currentPage = pageNum != null && pageNum > 0 ? pageNum : 1;
+        int currentSize = pageSize != null && pageSize > 0 ? pageSize : 10;
+        return sysRoleRepository.findAll()
+                .filter(role -> matches(role, roleName, status))
+                .flatMap(this::toResponseWithPermissions)
+                .collectList()
+                .map(all -> {
+                    int total = all.size();
+                    int from = Math.min(total, (currentPage - 1) * currentSize);
+                    int to = Math.min(total, from + currentSize);
+                    return PageResponse.of(all.subList(from, to), (long) total, currentPage, currentSize);
+                });
     }
 
     @Override
-    public PageResponse<SysRoleResponse> listRole(long pageNum, long pageSize, String roleName, Integer status) {
-        Page<SysRole> page = lambdaQuery()
-                .like(StringUtils.hasText(roleName), SysRole::getRoleName, roleName == null ? null : roleName.trim())
-                .eq(status != null, SysRole::getStatus, status)
-                .orderByAsc(SysRole::getSortNo)
-                .orderByDesc(SysRole::getCreateTime)
-                .page(new Page<>(Math.max(pageNum, 1L), Math.max(pageSize, 1L)));
-        return new PageResponse<>(page.getTotal(), page.getCurrent(), page.getSize(),
-                page.getRecords().stream().map(this::toResponse).toList());
+    public Mono<SysRoleResponse> getById(Long id) {
+        return findRole(id)
+                .flatMap(this::toResponseWithPermissions);
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
-    public SysRoleResponse createRole(SysRoleSaveRequest request) {
-        validateRequest(request);
-        checkDuplicateCode(null, request.getRoleCode());
-        LocalDateTime now = LocalDateTime.now();
-        SysRole entity = SysRole.builder()
-                .roleCode(request.getRoleCode().trim())
-                .roleName(request.getRoleName().trim())
-                .sortNo(request.getSortNo() == null ? 0 : request.getSortNo())
-                .status(request.getStatus() == null ? 1 : request.getStatus())
-                .remark(trimValue(request.getRemark()))
-                .createTime(now)
-                .updateTime(now)
-                .build();
-        save(entity);
-        replaceRolePermissions(entity.getId(), request.getPermissionIds());
-        return toResponse(entity);
+    public Mono<SysRoleResponse> create(SysRoleRequest request) {
+        SysRoleEntity entity = new SysRoleEntity();
+        entity.setRoleCode(request.getRoleCode());
+        entity.setRoleName(request.getRoleName());
+        entity.setSortNo(request.getSortNo() != null ? request.getSortNo() : 0);
+        entity.setStatus(request.getStatus() != null ? request.getStatus() : 1);
+        entity.setRemark(request.getRemark());
+        entity.setCreateTime(Instant.now());
+        entity.setUpdateTime(Instant.now());
+        return sysRoleRepository.insert(entity)
+                .flatMap(role -> saveRolePermissions(role, request.getPermissionIds()));
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
-    public SysRoleResponse updateRole(Long id, SysRoleSaveRequest request) {
-        validateRequest(request);
-        checkDuplicateCode(id, request.getRoleCode());
-        SysRole entity = getRequiredRole(id);
-        entity.setRoleCode(request.getRoleCode().trim());
-        entity.setRoleName(request.getRoleName().trim());
-        entity.setSortNo(request.getSortNo() == null ? 0 : request.getSortNo());
-        entity.setStatus(request.getStatus() == null ? 1 : request.getStatus());
-        entity.setRemark(trimValue(request.getRemark()));
-        entity.setUpdateTime(LocalDateTime.now());
-        updateById(entity);
-        replaceRolePermissions(id, request.getPermissionIds());
-        return toResponse(entity);
+    public Mono<SysRoleResponse> update(Long id, SysRoleRequest request) {
+        return findRole(id)
+                .flatMap(existing -> {
+                    existing.setRoleCode(request.getRoleCode());
+                    existing.setRoleName(request.getRoleName());
+                    existing.setSortNo(request.getSortNo());
+                    existing.setStatus(request.getStatus());
+                    existing.setRemark(request.getRemark());
+                    existing.setUpdateTime(Instant.now());
+                    return sysRoleRepository.updateById(existing)
+                            .thenReturn(existing);
+                })
+                .flatMap(role -> saveRolePermissions(role, request.getPermissionIds()));
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void deleteRole(Long id) {
-        getRequiredRole(id);
-        sysUserRoleMapper.delete(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<SysUserRole>()
-                .eq(SysUserRole::getRoleId, id));
-        sysRolePermissionMapper.delete(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<SysRolePermission>()
-                .eq(SysRolePermission::getRoleId, id));
-        removeById(id);
+    public Mono<Void> delete(Long id) {
+        return findRole(id)
+                .then(sysUserRoleRepository.findByRoleId(id).hasElements())
+                .flatMap(inUse -> {
+                    if (inUse) {
+                        return Mono.error(new IllegalArgumentException("该角色已分配用户，无法删除"));
+                    }
+                    return deleteRolePermissions(id)
+                            .then(sysRoleRepository.deleteById(id));
+                })
+                .then();
     }
 
-    @Override
-    public List<Long> listRoleIdsByUserId(Long userId) {
-        return sysUserRoleMapper.selectList(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<SysUserRole>()
-                        .eq(SysUserRole::getUserId, userId))
-                .stream()
-                .map(SysUserRole::getRoleId)
-                .toList();
+    private Mono<SysRoleEntity> findRole(Long id) {
+        return sysRoleRepository.selectById(id)
+                .switchIfEmpty(Mono.error(new IllegalArgumentException("角色不存在")));
     }
 
-    @Override
-    public List<SysRoleResponse> listByIds(List<Long> roleIds) {
-        if (roleIds == null || roleIds.isEmpty()) {
-            return List.of();
+    private boolean matches(SysRoleEntity role, String roleName, Integer status) {
+        if (roleName != null && !roleName.isBlank()
+                && (role.getRoleName() == null || !role.getRoleName().contains(roleName))) {
+            return false;
         }
-        return super.listByIds(roleIds).stream().map(this::toResponse).toList();
+        return status == null || status.equals(role.getStatus());
     }
 
-    @Override
-    public List<String> listRoleNamesByUserId(Long userId) {
-        return listByIds(listRoleIdsByUserId(userId)).stream()
-                .map(SysRoleResponse::getRoleName)
-                .toList();
+    private Mono<SysRoleResponse> saveRolePermissions(SysRoleEntity role, List<Long> permissionIds) {
+        Flux<SysRolePermissionEntity> inserts = permissionIds == null || permissionIds.isEmpty()
+                ? Flux.empty()
+                : Flux.fromIterable(permissionIds)
+                        .distinct()
+                        .flatMap(permissionId -> insertRolePermission(role.getId(), permissionId));
+        return deleteRolePermissions(role.getId())
+                .thenMany(inserts)
+                .then(toResponseWithPermissions(role));
     }
 
-    private void validateRequest(SysRoleSaveRequest request) {
-        if (request == null) {
-            throw new IllegalArgumentException("角色参数不能为空");
-        }
-        if (!StringUtils.hasText(request.getRoleCode())) {
-            throw new IllegalArgumentException("角色编码不能为空");
-        }
-        if (!StringUtils.hasText(request.getRoleName())) {
-            throw new IllegalArgumentException("角色名称不能为空");
-        }
+    private Mono<Void> deleteRolePermissions(Long roleId) {
+        return sysRolePermissionRepository.findByRoleId(roleId)
+                .flatMap(existing -> sysRolePermissionRepository.deleteByRoleIdAndPermissionId(existing.getRoleId(), existing.getPermissionId()))
+                .then();
     }
 
-    private void checkDuplicateCode(Long id, String roleCode) {
-        long count = lambdaQuery()
-                .eq(SysRole::getRoleCode, roleCode.trim())
-                .ne(id != null, SysRole::getId, id)
-                .count();
-        if (count > 0) {
-            throw new IllegalArgumentException("角色编码已存在");
-        }
+    private Mono<SysRolePermissionEntity> insertRolePermission(Long roleId, Long permissionId) {
+        SysRolePermissionEntity entity = new SysRolePermissionEntity();
+        entity.setRoleId(roleId);
+        entity.setPermissionId(permissionId);
+        entity.setCreateTime(Instant.now());
+        return sysRolePermissionRepository.insert(entity);
     }
 
-    private SysRole getRequiredRole(Long id) {
-        SysRole role = getById(id);
-        if (role == null) {
-            throw new IllegalArgumentException("未找到对应角色");
-        }
-        return role;
+    private Mono<SysRoleResponse> toResponseWithPermissions(SysRoleEntity role) {
+        return sysRolePermissionRepository.findByRoleId(role.getId())
+                .map(SysRolePermissionEntity::getPermissionId)
+                .collectList()
+                .flatMap(permissionIds -> {
+                    if (permissionIds.isEmpty()) {
+                        return Mono.just(buildRoleResponse(role, Collections.emptyList(), Collections.emptyList()));
+                    }
+                    return Flux.fromIterable(permissionIds)
+                            .flatMap(sysPermissionRepository::selectById)
+                            .collectList()
+                            .map(permissions -> buildRoleResponse(
+                                    role,
+                                    permissionIds,
+                                    permissions.stream().map(SysPermissionEntity::getPermissionName).toList()));
+                });
     }
 
-    private void replaceRolePermissions(Long roleId, List<Long> permissionIds) {
-        sysRolePermissionMapper.delete(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<SysRolePermission>()
-                .eq(SysRolePermission::getRoleId, roleId));
-        if (permissionIds == null || permissionIds.isEmpty()) {
-            return;
-        }
-        LocalDateTime now = LocalDateTime.now();
-        permissionIds.stream().distinct().forEach(permissionId -> sysRolePermissionMapper.insert(SysRolePermission.builder()
-                .roleId(roleId)
-                .permissionId(permissionId)
-                .createTime(now)
-                .build()));
-    }
-
-    private SysRoleResponse toResponse(SysRole entity) {
-        List<Long> permissionIds = sysPermissionService.listPermissionIdsByRoleId(entity.getId());
-        List<String> permissionNames = sysPermissionService.listByIds(permissionIds).stream()
-                .map(SysPermissionResponse::getPermissionName)
-                .toList();
+    private SysRoleResponse buildRoleResponse(
+            SysRoleEntity role, List<Long> permissionIds, List<String> permissionNames) {
         return SysRoleResponse.builder()
-                .id(entity.getId())
-                .roleCode(entity.getRoleCode())
-                .roleName(entity.getRoleName())
-                .sortNo(entity.getSortNo())
-                .status(entity.getStatus())
-                .remark(entity.getRemark())
+                .id(role.getId())
+                .roleCode(role.getRoleCode())
+                .roleName(role.getRoleName())
+                .sortNo(role.getSortNo())
+                .status(role.getStatus())
+                .remark(role.getRemark())
+                .createTime(role.getCreateTime())
+                .updateTime(role.getUpdateTime())
                 .permissionIds(permissionIds)
                 .permissionNames(permissionNames)
-                .createTime(entity.getCreateTime())
                 .build();
-    }
-
-    private String trimValue(String value) {
-        return StringUtils.hasText(value) ? value.trim() : null;
     }
 }

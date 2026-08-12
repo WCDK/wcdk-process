@@ -1,40 +1,35 @@
 package com.wcdk.process.dto;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
-/**
- * @auther WCDK
- * @date 2026/7/15
- * @version 1.0
- **/
+
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
+/**
+ * WCDK 流程模块类型。
+ *
+ * @author WCDK
+ * @version 1.0
+ */
 public class SysUserResponse {
-
     private Long id;
-
     private Long deptId;
-
-    private String deptName;
-
     private String username;
-
     private String realName;
-
     private String mobile;
-
     private String email;
-
     private Integer status;
-
-    private LocalDateTime lastLoginTime;
-
-    private LocalDateTime createTime;
-
+    private Instant lastLoginTime;
+    private Instant createTime;
+    private Instant updateTime;
+    private String deptName;
     private List<Long> roleIds;
-
     private List<String> roleNames;
 }

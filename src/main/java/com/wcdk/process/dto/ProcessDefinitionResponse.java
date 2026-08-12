@@ -1,40 +1,35 @@
 package com.wcdk.process.dto;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
-import java.util.List;
+import java.time.Instant;
 
-/**
- * @auther WCDK
- * @date 2026/7/10
- * @version 1.0
- **/
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
+/**
+ * WCDK 流程模块类型。
+ *
+ * @author WCDK
+ * @version 1.0
+ */
 public class ProcessDefinitionResponse {
 
-    private String processDefinitionId;
-
-    private String processDefinitionKey;
-
-    private String processDefinitionName;
-
-    private String category;
-
+    private String id;
+    private String tenantId;
+    private String key;
+    private String name;
     private Integer version;
-
+    private String category;
+    private String description;
     private String deploymentId;
-
     private String resourceName;
-
-    private Boolean suspended;
-
-    private Integer invalidStatus;
-
-    private List<String> clientIds;
-
-    private List<String> clientNames;
-
-    private List<String> processBeanNames;
+    private String diagramResourceName;
+    private Integer suspended;
+    private Instant createdAt;
+    private Instant updatedAt;
 }

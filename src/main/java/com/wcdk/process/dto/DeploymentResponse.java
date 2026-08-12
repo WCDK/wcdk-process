@@ -1,35 +1,32 @@
 package com.wcdk.process.dto;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
-import java.util.Date;
-import java.util.List;
+import java.time.Instant;
 
-/**
- * @auther WCDK
- * @date 2026/7/10
- * @version 1.0
- **/
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
+/**
+ * WCDK 流程模块类型。
+ *
+ * @author WCDK
+ * @version 1.0
+ */
 public class DeploymentResponse {
 
-    private String deploymentId;
-
-    private String deploymentName;
-
-    private String fileName;
-
+    private String id;
+    private String tenantId;
+    private String name;
     private String category;
-
-    private Date deployTime;
-
-    private Integer invalidStatus;
-
-    private List<String> clientIds;
-
-    private List<String> clientNames;
-
-    private List<String> processBeanNames;
+    private String description;
+    private Instant deploymentTime;
+    private String sourceSystem;
+    private Integer version;
+    private Instant createdAt;
+    private Instant updatedAt;
 }

@@ -7,24 +7,19 @@ import lombok.NoArgsConstructor;
 
 import java.util.Map;
 
-/**
- * @auther WCDK
- * @date 2026/7/10
- * @version 1.0
- **/
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+/**
+ * WCDK 流程模块类型。
+ *
+ * @author WCDK
+ * @version 1.0
+ */
 public class TaskCompleteRequest {
 
-    /**
-     * 任务ID
-     */
-    private String taskId;
+    private String userId;
 
-    /**
-     * 办理变量
-     */
     private Map<String, Object> variables;
 }

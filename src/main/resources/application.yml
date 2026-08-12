@@ -1,0 +1,16 @@
+server:
+  port: 58080
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.r2dbc.R2dbcAutoConfiguration
+  application:
+    name: WCDK-PROCESS
+  profiles:
+    active: dev
+
+# 数据库类型配置：dm/oracle/postgresql/mysql
+wcdk:
+  database:
+    type: dm

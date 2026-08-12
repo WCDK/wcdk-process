@@ -1,28 +1,26 @@
 package com.wcdk.process.service;
 
-import com.wcdk.process.common.PageResponse;
+import com.wcdk.process.dto.PageResponse;
+import com.wcdk.process.dto.SysRoleRequest;
 import com.wcdk.process.dto.SysRoleResponse;
-import com.wcdk.process.dto.SysRoleSaveRequest;
+import reactor.core.publisher.Mono;
 
-import java.util.List;
 /**
+ * 角色管理服务。
+ *
  * @auther WCDK
- * @date 2026/7/15
+ * @date 2026/08/10
  * @version 1.0
- **/
+ */
 public interface SysRoleService {
 
-    PageResponse<SysRoleResponse> listRole(long pageNum, long pageSize, String roleName, Integer status);
+    Mono<PageResponse<SysRoleResponse>> list(Integer pageNum, Integer pageSize, String roleName, Integer status);
 
-    SysRoleResponse createRole(SysRoleSaveRequest request);
+    Mono<SysRoleResponse> getById(Long id);
 
-    SysRoleResponse updateRole(Long id, SysRoleSaveRequest request);
+    Mono<SysRoleResponse> create(SysRoleRequest request);
 
-    void deleteRole(Long id);
+    Mono<SysRoleResponse> update(Long id, SysRoleRequest request);
 
-    List<Long> listRoleIdsByUserId(Long userId);
-
-    List<SysRoleResponse> listByIds(List<Long> roleIds);
-
-    List<String> listRoleNamesByUserId(Long userId);
+    Mono<Void> delete(Long id);
 }

@@ -1,0 +1,45 @@
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.r2dbc.R2dbcAutoConfiguration
+  r2dbc:
+    url: r2dbc:dm://127.0.0.1:25236/WCDK-PROCESS
+    username: WCDK-PROCESS
+    password: Wcdk@2026
+    pool:
+      max-size: 30
+      max-idle-time: PT60S
+  data:
+    r2dbc:
+      repositories:
+        enabled: true
+  scheduler:
+    parallel:
+      max-size: 32  # 并行调度器线程数，设置为CPU核心数
+    bounded-elastic:
+      max-size: 128   # 弹性调度器线程数，设置为CPU核心数的4倍
+      queue-size: 100000  # 队列大小，根据需要调整
+wcdk:
+  r2dbc:
+    sql-log-enabled: true
+    enabled: true
+    snowflake-id: true
+    # 事务相关配置
+    transaction:
+      enabled: true
+      default-timeout: 30        # 默认超时时间（秒）
+      default-read-only: false   # 默认是否只读
+      max-retry: 3              # 最大重试次数
+    # 数据库Schema初始化配置
+    database-initializer:
+      enabled: false             # 是否启用数据库初始化
+      sql-location: classpath*:sql/**/*.sql  # SQL文件位置
+      mode: always               # 初始化模式：always/never
+      ignore-errors: true        # 是否忽略初始化错误
+      execute-in-transaction: true  # 是否在事务中执行
+
+# 数据库类型配置：dm/oracle/postgresql/mysql
+# 与 Maven Profile 对应：mvn clean package -P dm
+database:
+  type: dm
